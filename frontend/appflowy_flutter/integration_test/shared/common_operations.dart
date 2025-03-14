@@ -50,6 +50,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:universal_platform/universal_platform.dart';
 
 import 'emoji.dart';
@@ -615,7 +617,7 @@ extension CommonOperations on WidgetTester {
         );
     final distanceY = getCenter(to).dy - getCenter(from).dx;
     await drag(from, Offset(0, distanceY));
-    await pumpAndSettle();
+    await pumpAndSettle(const Duration(seconds: 1));
   }
 
   // tap the button with [FlowySvgData]
@@ -671,7 +673,28 @@ extension CommonOperations on WidgetTester {
       await tapEmoji(icon.emoji);
     } else if (icon.type == FlowyIconType.icon) {
       await tapIcon(icon);
+    } else if (icon.type == FlowyIconType.custom) {
+      await pickImage(icon);
     }
+    await pumpAndSettle();
+  }
+
+  Future<void> updatePageIconInTitleBarByPasteALink({
+    required String name,
+    required ViewLayoutPB layout,
+    required String iconLink,
+  }) async {
+    await openPage(
+      name,
+      layout: layout,
+    );
+    final title = find.descendant(
+      of: find.byType(ViewTitleBar),
+      matching: find.text(name),
+    );
+    await tapButton(title);
+    await tapButton(find.byType(EmojiPickerButton));
+    await pasteImageLinkAsIcon(iconLink);
     await pumpAndSettle();
   }
 
@@ -932,6 +955,45 @@ extension CommonOperations on WidgetTester {
         builtInSpaceColors.first,
       ),
     );
+  }
+
+  Future<EmojiIconData> prepareImageIcon() async {
+    final imagePath = await rootBundle.load('assets/test/images/sample.jpeg');
+    final tempDirectory = await getTemporaryDirectory();
+    final localImagePath = p.join(tempDirectory.path, 'sample.jpeg');
+    final imageFile = File(localImagePath)
+      ..writeAsBytesSync(imagePath.buffer.asUint8List());
+    return EmojiIconData.custom(imageFile.path);
+  }
+
+  Future<EmojiIconData> prepareSvgIcon() async {
+    final imagePath = await rootBundle.load('assets/test/images/sample.svg');
+    final tempDirectory = await getTemporaryDirectory();
+    final localImagePath = p.join(tempDirectory.path, 'sample.svg');
+    final imageFile = File(localImagePath)
+      ..writeAsBytesSync(imagePath.buffer.asUint8List());
+    return EmojiIconData.custom(imageFile.path);
+  }
+
+  /// create new page and show slash menu
+  Future<void> createPageAndShowSlashMenu(String title) async {
+    await createNewDocumentOnMobile(title);
+    await editor.tapLineOfEditorAt(0);
+    await editor.showSlashMenu();
+  }
+
+  /// create new page and show at menu
+  Future<void> createPageAndShowAtMenu(String title) async {
+    await createNewDocumentOnMobile(title);
+    await editor.tapLineOfEditorAt(0);
+    await editor.showAtMenu();
+  }
+
+  /// create new page and show plus menu
+  Future<void> createPageAndShowPlusMenu(String title) async {
+    await createNewDocumentOnMobile(title);
+    await editor.tapLineOfEditorAt(0);
+    await editor.showPlusMenu();
   }
 }
 

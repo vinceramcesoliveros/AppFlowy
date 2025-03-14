@@ -354,7 +354,6 @@
     "storageLimitDialogTitle": "Vous n'avez plus d'espace de stockage gratuit. Effectuez une mise à niveau pour débloquer un espace de stockage illimité",
     "storageLimitDialogTitleIOS": "Vous n'avez plus d'espace de stockage gratuit.",
     "aiResponseLimitTitle": "Vous n'avez plus de réponses d'IA gratuites. Passez au plan Pro ou achetez un module complémentaire d'IA pour débloquer des réponses illimitées",
-    "aiResponseLimitTitleIOS": "Vous n'avez plus de réponses IA gratuites.",
     "aiResponseLimitDialogTitle": "La limite des réponses de l'IA a été atteinte",
     "aiResponseLimit": "Vous n'avez plus de réponses IA gratuites.\n\nAccédez à Paramètres -> Plans -> Cliquez sur AI Max ou Pro Plan pour obtenir plus de réponses AI",
     "askOwnerToUpgradeToPro": "Votre espace de stockage gratuit est presque plein. Demandez au propriétaire de votre espace de travail de passer au plan Pro",
@@ -1383,7 +1382,6 @@
       "typeAValue": "Tapez une valeur...",
       "layout": "Mise en page",
       "databaseLayout": "Mise en page",
-      "viewList": "Vues de base de données",
       "editView": "Modifier vue",
       "boardSettings": "Paramètres du tableau",
       "calendarSettings": "Paramètres du calendrier",
@@ -1391,7 +1389,8 @@
       "duplicateView": "Dupliquer la vue",
       "deleteView": "Supprimer la vue",
       "numberOfVisibleFields": "{} affiché(s)",
-      "Properties": "Propriétés"
+      "Properties": "Propriétés",
+      "viewList": "Vues de base de données"
     },
     "filter": {
       "empty": "Aucun filtre actif",
@@ -2167,11 +2166,11 @@
       "layoutDateField": "Calendrier de mise en page par",
       "changeLayoutDateField": "Modifier le champ de mise en page",
       "noDateTitle": "Pas de date",
-      "noDateHint": "Les événements non planifiés s'afficheront ici",
       "unscheduledEventsTitle": "Événements non planifiés",
       "clickToAdd": "Cliquez pour ajouter au calendrier",
       "name": "Disposition du calendrier",
-      "clickToOpen": "Cliquez pour ouvrir l'évènement"
+      "clickToOpen": "Cliquez pour ouvrir l'évènement",
+      "noDateHint": "Les événements non planifiés s'afficheront ici"
     },
     "referencedCalendarPrefix": "Vue",
     "quickJumpYear": "Sauter à",

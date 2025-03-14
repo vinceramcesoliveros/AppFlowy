@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/plugins/document/application/document_bloc.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/block_menu/block_menu_button.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/copy_and_paste/clipboard_service.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/common.dart';
@@ -42,11 +43,12 @@ class _ImageMenuState extends State<ImageMenu> {
 
   @override
   Widget build(BuildContext context) {
+    final isPlaceholder = url == null || url!.isEmpty;
     final theme = Theme.of(context);
     return ValueListenableBuilder<ResizableImageState>(
       valueListenable: widget.imageStateNotifier,
       builder: (_, state, child) {
-        if (state == ResizableImageState.loading) {
+        if (state == ResizableImageState.loading && !isPlaceholder) {
           return const SizedBox.shrink();
         }
 
@@ -58,7 +60,7 @@ class _ImageMenuState extends State<ImageMenu> {
               BoxShadow(
                 blurRadius: 5,
                 spreadRadius: 1,
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
               ),
             ],
             borderRadius: BorderRadius.circular(4.0),
@@ -66,21 +68,25 @@ class _ImageMenuState extends State<ImageMenu> {
           child: Row(
             children: [
               const HSpace(4),
-              MenuBlockButton(
-                tooltip: LocaleKeys.document_imageBlock_openFullScreen.tr(),
-                iconData: FlowySvgs.full_view_s,
-                onTap: openFullScreen,
-              ),
-              const HSpace(4),
-              MenuBlockButton(
-                tooltip: LocaleKeys.editor_copy.tr(),
-                iconData: FlowySvgs.copy_s,
-                onTap: copyImageLink,
-              ),
-              const HSpace(4),
+              if (!isPlaceholder) ...[
+                MenuBlockButton(
+                  tooltip: LocaleKeys.document_imageBlock_openFullScreen.tr(),
+                  iconData: FlowySvgs.full_view_s,
+                  onTap: openFullScreen,
+                ),
+                const HSpace(4),
+                MenuBlockButton(
+                  tooltip: LocaleKeys.editor_copy.tr(),
+                  iconData: FlowySvgs.copy_s,
+                  onTap: copyImageLink,
+                ),
+                const HSpace(4),
+              ],
               if (widget.state.editorState.editable) ...[
-                _ImageAlignButton(node: widget.node, state: widget.state),
-                const _Divider(),
+                if (!isPlaceholder) ...[
+                  _ImageAlignButton(node: widget.node, state: widget.state),
+                  const _Divider(),
+                ],
                 MenuBlockButton(
                   tooltip: LocaleKeys.button_delete.tr(),
                   iconData: FlowySvgs.trash_s,
@@ -140,7 +146,8 @@ class _ImageMenuState extends State<ImageMenu> {
     showDialog(
       context: context,
       builder: (_) => InteractiveImageViewer(
-        userProfile: context.read<UserWorkspaceBloc>().userProfile,
+        userProfile: context.read<UserWorkspaceBloc?>()?.userProfile ??
+            context.read<DocumentBloc>().state.userProfilePB,
         imageProvider: AFBlockImageProvider(
           images: [
             ImageBlockData(

@@ -17,6 +17,7 @@ import 'package:appflowy/plugins/document/presentation/editor_plugins/migration/
 import 'package:appflowy/plugins/document/presentation/editor_style.dart';
 import 'package:appflowy/shared/appflowy_network_image.dart';
 import 'package:appflowy/shared/icon_emoji_picker/flowy_icon_emoji_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
 import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy/workspace/application/view/view_listener.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
@@ -73,12 +74,14 @@ class DocumentCoverWidget extends StatefulWidget {
     required this.editorState,
     required this.onIconChanged,
     required this.view,
+    required this.tabs,
   });
 
   final Node node;
   final EditorState editorState;
   final ValueChanged<EmojiIconData> onIconChanged;
   final ViewPB view;
+  final List<PickerTabType> tabs;
 
   @override
   State<DocumentCoverWidget> createState() => _DocumentCoverWidgetState();
@@ -157,6 +160,7 @@ class _DocumentCoverWidgetState extends State<DocumentCoverWidget> {
         final offset = _calculateIconLeft(context, constraints);
         return Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Stack(
               children: [
@@ -170,6 +174,8 @@ class _DocumentCoverWidgetState extends State<DocumentCoverWidget> {
                     hasIcon: hasIcon,
                     offset: offset,
                     isCoverTitleHovered: isCoverTitleHovered,
+                    documentId: view.id,
+                    tabs: widget.tabs,
                   ),
                 ),
                 if (hasCover)
@@ -190,7 +196,7 @@ class _DocumentCoverWidgetState extends State<DocumentCoverWidget> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
+              padding: EdgeInsets.fromLTRB(offset, 0, offset, 12),
               child: MouseRegion(
                 onEnter: (event) => isCoverTitleHovered.value = true,
                 onExit: (event) => isCoverTitleHovered.value = false,
@@ -223,6 +229,7 @@ class _DocumentCoverWidgetState extends State<DocumentCoverWidget> {
         editorState: widget.editorState,
         node: widget.node,
         icon: viewIcon,
+        documentId: view.id,
         onChangeIcon: (icon) => _saveIconOrCover(icon: icon),
       ),
     );
@@ -339,7 +346,9 @@ class DocumentHeaderToolbar extends StatefulWidget {
     required this.hasIcon,
     required this.onIconOrCoverChanged,
     required this.offset,
+    this.documentId,
     required this.isCoverTitleHovered,
+    required this.tabs,
   });
 
   final Node node;
@@ -349,7 +358,9 @@ class DocumentHeaderToolbar extends StatefulWidget {
   final void Function({(CoverType, String?)? cover, EmojiIconData? icon})
       onIconOrCoverChanged;
   final double offset;
+  final String? documentId;
   final ValueNotifier<bool> isCoverTitleHovered;
+  final List<PickerTabType> tabs;
 
   @override
   State<DocumentHeaderToolbar> createState() => _DocumentHeaderToolbarState();
@@ -468,6 +479,8 @@ class _DocumentHeaderToolbarState extends State<DocumentHeaderToolbar> {
           popupBuilder: (BuildContext popoverContext) {
             isPopoverOpen = true;
             return FlowyIconEmojiPicker(
+              tabs: widget.tabs,
+              documentId: widget.documentId,
               onSelectedEmoji: (r) {
                 widget.onIconOrCoverChanged(icon: r.data);
                 if (!r.keepOpen) _popoverController.close();
@@ -628,7 +641,7 @@ class DocumentCoverState extends State<DocumentCover> {
                     fillColor: Theme.of(context)
                         .colorScheme
                         .onSurfaceVariant
-                        .withOpacity(0.5),
+                        .withValues(alpha: 0.5),
                     height: 32,
                     title: LocaleKeys.document_plugins_cover_changeCover.tr(),
                   ),
@@ -714,8 +727,10 @@ class DocumentCoverState extends State<DocumentCover> {
                 onPressed: () => popoverController.show(),
                 hoverColor: Theme.of(context).colorScheme.surface,
                 textColor: Theme.of(context).colorScheme.tertiary,
-                fillColor:
-                    Theme.of(context).colorScheme.surface.withOpacity(0.5),
+                fillColor: Theme.of(context)
+                    .colorScheme
+                    .surface
+                    .withValues(alpha: 0.5),
                 title: LocaleKeys.document_plugins_cover_changeCover.tr(),
               ),
             ),
@@ -809,8 +824,8 @@ class DeleteCoverButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fillColor = UniversalPlatform.isDesktopOrWeb
-        ? Theme.of(context).colorScheme.surface.withOpacity(0.5)
-        : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5);
+        ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.5)
+        : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
     final svgColor = UniversalPlatform.isDesktopOrWeb
         ? Theme.of(context).colorScheme.tertiary
         : Theme.of(context).colorScheme.onPrimary;
@@ -836,11 +851,13 @@ class DocumentIcon extends StatefulWidget {
     required this.editorState,
     required this.icon,
     required this.onChangeIcon,
+    this.documentId,
   });
 
   final Node node;
   final EditorState editorState;
   final EmojiIconData icon;
+  final String? documentId;
   final ValueChanged<EmojiIconData> onChangeIcon;
 
   @override
@@ -865,6 +882,12 @@ class _DocumentIconState extends State<DocumentIcon> {
         popupBuilder: (BuildContext popoverContext) {
           return FlowyIconEmojiPicker(
             initialType: widget.icon.type.toPickerTabType(),
+            tabs: const [
+              PickerTabType.emoji,
+              PickerTabType.icon,
+              PickerTabType.custom,
+            ],
+            documentId: widget.documentId,
             onSelectedEmoji: (r) {
               widget.onChangeIcon(r.data);
               if (!r.keepOpen) _popoverController.close();

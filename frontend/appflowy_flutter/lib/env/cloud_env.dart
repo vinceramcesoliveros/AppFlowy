@@ -180,7 +180,7 @@ Future<void> useLocalServer() async {
   await _setAuthenticatorType(AuthenticatorType.local);
 }
 
-/// Use getIt<AppFlowyCloudSharedEnv>() to get the shared environment.
+// Use getIt<AppFlowyCloudSharedEnv>() to get the shared environment.
 class AppFlowyCloudSharedEnv {
   AppFlowyCloudSharedEnv({
     required AuthenticatorType authenticatorType,
@@ -247,6 +247,7 @@ Future<AppFlowyCloudConfiguration> configurationFromUri(
   // In development mode, the app is configured to access the AppFlowy cloud server directly through specific ports.
   // This setup bypasses the need for Nginx, meaning that the AppFlowy cloud should be running without an Nginx server
   // in the development environment.
+  // If you modify following code, please update the corresponding documentation in the appflowy billing.
   if (authenticatorType == AuthenticatorType.appflowyCloudDevelop) {
     return AppFlowyCloudConfiguration(
       base_url: "$baseUrl:8000",

@@ -1,4 +1,62 @@
 # Release Notes
+## Version 0.8.6 - 06/03/2025
+### Bug Fixes
+- Fix the incorrect title positioning when adjusting the document width setting
+- Enhance the user experience of the icon color picker for smoother interactions
+- Add missing icons to the database to ensure completeness and consistency
+- Resolve the issue with links not functioning correctly on Linux systems
+- Improve the outline feature to work seamlessly within columns
+- Center the bulleted list icon within columns for better visual alignment
+- Enable dragging blocks under tables in the second column to enhance flexibility
+- Disable the AI writer feature within tables to prevent conflicts and improve usability
+- Automatically enable the header row when converting content from Markdown to ensure proper formatting
+- Use the "Undo" function to revert the auto-formatting
+
+## Version 0.8.5 - 04/03/2025
+### New Features
+- Columns in Documents: Arrange content side by side using drag-and-drop or the slash menu
+- AI Writers: New AI assistants in documents with response formatting options (list, table, text with images, image-only), follow-up questions, contextual memory, and more
+- Compact Mode for Databases: Enable compact mode for grid and kanban views (full-page and inline) to increase information density, displaying more data per screen
+### Bug Fixes
+- Fixed an issue where callout blocks couldn’t be deleted when appearing as the first line in a document
+- Fixed a bug preventing the relation field in databases from opening
+- Fixed an issue where links in documents were unclickable on Linux
+
+## Version 0.8.4 - 18/02/2025
+### New Features
+- Switch AI mode on mobile
+- Support locking page
+- Support uploading svg file as icon
+- Support the slash, at, and plus menus on mobile
+### Bug Fixes
+- Gallery not rendering in row page
+- Save image should not copy the image (mobile)
+- Support exporting more content to markdown
+
+## Version 0.8.2 - 23/01/2025
+### New Features
+- Customized database view icons
+- Support for uploading images as custom icons
+- Enabled selecting multiple AI messages to save into a document
+- Added the ability to scale the app's display size on mobile
+- Support for pasting image links without file extensions
+### Bug Fixes
+- Fixed an issue where pasting tables from other apps wasn't working
+- Fixed homepage URL issues in Settings
+- Fixed an issue where the 'Cancel' button was not visible on the Shortcuts page
+
+## Version 0.8.1 - 14/01/2025
+### New Features
+- AI Chat Layout Options: Customize how AI responses appear with new layouts—List, Table, Image with Text, and Media Only
+- DALL-E Integration: Generate stunning AI images from text prompts, now available in AI Chat
+- Improved Desktop Search: Find what you need faster using keywords or by asking questions in natural language
+- Self-Hosting: Configure web server URLs directly in Settings to enable features like Publish, Copy Link to Share, Custom URLs, and more
+- Sidebar Enhancement: Drag to reorder your favorited pages in the Sidebar
+- Mobile Table Resizing: Adjust column widths in Simple Tables by long pressing the column borders on mobile
+### Bug Fixes
+- Resolved an icon rendering issue in callout blocks, tab bars, and search results
+- Enhanced image reliability: Retry functionality ensures images load successfully if the first attempt fails
+
 ## Version 0.8.0 - 06/01/2025
 ### Bug Fixes
 - Fixed error displaying in the page style menu

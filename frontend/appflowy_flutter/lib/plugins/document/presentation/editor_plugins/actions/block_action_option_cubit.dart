@@ -10,7 +10,8 @@ import 'package:appflowy/workspace/application/view/prelude.dart';
 import 'package:appflowy_backend/dispatch/dispatch.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_editor/appflowy_editor.dart'
+    hide QuoteBlockKeys, quoteNode;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class BlockActionOptionState {}
@@ -321,9 +322,8 @@ class BlockActionOptionCubit extends Cubit<BlockActionOptionState> {
         },
       );
 
-      // heading block and callout block should not have children
-      if ([HeadingBlockKeys.type, CalloutBlockKeys.type, QuoteBlockKeys.type]
-          .contains(toType)) {
+      // heading block should not have children
+      if ([HeadingBlockKeys.type].contains(toType)) {
         afterNode = afterNode.copyWith(children: []);
         afterNode = await _handleSubPageNode(afterNode, node);
         insertedNode.add(afterNode);

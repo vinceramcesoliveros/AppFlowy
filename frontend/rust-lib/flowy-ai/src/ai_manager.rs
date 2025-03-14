@@ -3,14 +3,14 @@ use crate::entities::{
   ChatInfoPB, ChatMessageListPB, ChatMessagePB, ChatSettingsPB, FilePB, PredefinedFormatPB,
   RepeatedRelatedQuestionPB, StreamMessageParams,
 };
-use crate::local_ai::local_llm_chat::LocalAIController;
+use crate::local_ai::controller::LocalAIController;
 use crate::middleware::chat_service_mw::AICloudServiceMiddleware;
 use crate::persistence::{insert_chat, read_chat_metadata, ChatTable};
 use std::collections::HashMap;
 
 use appflowy_plugin::manager::PluginManager;
 use dashmap::DashMap;
-use flowy_ai_pub::cloud::{ChatCloudService, ChatSettings, UpdateChatParams};
+use flowy_ai_pub::cloud::{ChatCloudService, ChatSettings, ModelList, UpdateChatParams};
 use flowy_error::{FlowyError, FlowyResult};
 use flowy_sqlite::kv::KVStorePreferences;
 use flowy_sqlite::DBConnection;
@@ -58,7 +58,7 @@ pub struct AIManager {
   pub user_service: Arc<dyn AIUserService>,
   pub external_service: Arc<dyn AIExternalService>,
   chats: Arc<DashMap<String, Arc<Chat>>>,
-  pub local_ai_controller: Arc<LocalAIController>,
+  pub local_ai: Arc<LocalAIController>,
   store_preferences: Arc<KVStorePreferences>,
 }
 
@@ -72,19 +72,23 @@ impl AIManager {
   ) -> AIManager {
     let user_service = Arc::new(user_service);
     let plugin_manager = Arc::new(PluginManager::new());
-    let local_ai_controller = Arc::new(LocalAIController::new(
+    let local_ai = Arc::new(LocalAIController::new(
       plugin_manager.clone(),
       store_preferences.clone(),
       user_service.clone(),
       chat_cloud_service.clone(),
     ));
-    let external_service = Arc::new(query_service);
 
-    // setup local chat service
+    let cloned_local_ai = local_ai.clone();
+    tokio::spawn(async move {
+      cloned_local_ai.observe_plugin_resource().await;
+    });
+
+    let external_service = Arc::new(query_service);
     let cloud_service_wm = Arc::new(AICloudServiceMiddleware::new(
       user_service.clone(),
       chat_cloud_service,
-      local_ai_controller.clone(),
+      local_ai.clone(),
       storage_service,
     ));
 
@@ -92,15 +96,14 @@ impl AIManager {
       cloud_service_wm,
       user_service,
       chats: Arc::new(DashMap::new()),
-      local_ai_controller,
+      local_ai,
       external_service,
       store_preferences,
     }
   }
 
   pub async fn initialize(&self, _workspace_id: &str) -> Result<(), FlowyError> {
-    // Ignore following error
-    let _ = self.local_ai_controller.refresh().await;
+    self.local_ai.reload().await?;
     Ok(())
   }
 
@@ -113,9 +116,9 @@ impl AIManager {
         self.cloud_service_wm.clone(),
       ))
     });
-    trace!("[AI Plugin] notify open chat: {}", chat_id);
-    if self.local_ai_controller.is_running() {
-      self.local_ai_controller.open_chat(chat_id);
+    if self.local_ai.is_running() {
+      trace!("[AI Plugin] notify open chat: {}", chat_id);
+      self.local_ai.open_chat(chat_id);
     }
 
     let user_service = self.user_service.clone();
@@ -146,7 +149,7 @@ impl AIManager {
 
   pub async fn close_chat(&self, chat_id: &str) -> Result<(), FlowyError> {
     trace!("close chat: {}", chat_id);
-    self.local_ai_controller.close_chat(chat_id);
+    self.local_ai.close_chat(chat_id);
     Ok(())
   }
 
@@ -154,9 +157,9 @@ impl AIManager {
     if let Some((_, chat)) = self.chats.remove(chat_id) {
       chat.close();
 
-      if self.local_ai_controller.is_running() {
+      if self.local_ai.is_running() {
         info!("[AI Plugin] notify close chat: {}", chat_id);
-        self.local_ai_controller.close_chat(chat_id);
+        self.local_ai.close_chat(chat_id);
       }
     }
     Ok(())
@@ -239,6 +242,15 @@ impl AIManager {
       .stream_regenerate_response(question_message_id, answer_stream_port, format)
       .await?;
     Ok(())
+  }
+
+  pub async fn get_available_models(&self) -> FlowyResult<ModelList> {
+    let workspace_id = self.user_service.workspace_id()?;
+    let list = self
+      .cloud_service_wm
+      .get_available_models(&workspace_id)
+      .await?;
+    Ok(list)
   }
 
   pub async fn get_or_create_chat_instance(&self, chat_id: &str) -> Result<Arc<Chat>, FlowyError> {

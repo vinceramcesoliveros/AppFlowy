@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:appflowy/plugins/document/application/document_bloc.dart';
 import 'package:appflowy/plugins/document/application/document_data_pb_extension.dart';
 import 'package:appflowy/plugins/document/application/document_service.dart';
-import 'package:appflowy/plugins/document/presentation/editor_plugins/openai/widgets/ask_ai_block_component.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/plugins.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-document/protobuf.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -113,7 +113,7 @@ class TransactionAdapter {
   ) {
     return transaction.operations
         .map((op) => op.toBlockAction(editorState, documentId))
-        .whereNotNull()
+        .nonNulls
         .expand((element) => element)
         .toList(growable: false); // avoid lazy evaluation
   }
@@ -163,7 +163,7 @@ extension on InsertOperation {
     Path currentPath = path;
     final List<BlockActionWrapper> actions = [];
     for (final node in nodes) {
-      if (node.type == AskAIBlockKeys.type) {
+      if (node.type == AiWriterBlockKeys.type) {
         continue;
       }
 

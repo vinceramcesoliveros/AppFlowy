@@ -1,7 +1,8 @@
 import 'package:appflowy/plugins/document/presentation/editor_plugins/actions/block_action_option_cubit.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/plugins.dart';
 import 'package:appflowy_backend/log.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_editor/appflowy_editor.dart'
+    hide quoteNode, QuoteBlockKeys;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -163,8 +164,6 @@ void main() {
 
     for (final type in [
       HeadingBlockKeys.type,
-      QuoteBlockKeys.type,
-      CalloutBlockKeys.type,
     ]) {
       test('from nested bulleted list to $type', () async {
         const text = 'bulleted list';
@@ -229,8 +228,6 @@ void main() {
 
     for (final type in [
       HeadingBlockKeys.type,
-      QuoteBlockKeys.type,
-      CalloutBlockKeys.type,
     ]) {
       test('from nested numbered list to $type', () async {
         const text = 'numbered list';
@@ -295,8 +292,6 @@ void main() {
 
     for (final type in [
       HeadingBlockKeys.type,
-      QuoteBlockKeys.type,
-      CalloutBlockKeys.type,
     ]) {
       // numbered list, bulleted list, todo list
       // before
@@ -391,6 +386,8 @@ void main() {
       BulletedListBlockKeys.type,
       NumberedListBlockKeys.type,
       TodoListBlockKeys.type,
+      QuoteBlockKeys.type,
+      CalloutBlockKeys.type,
     ]) {
       // numbered list, bulleted list, todo list
       // before

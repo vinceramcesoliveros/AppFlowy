@@ -70,6 +70,13 @@ extension ViewExtension on ViewPB {
   String get nameOrDefault =>
       name.isEmpty ? LocaleKeys.menuAppHeader_defaultNewPageName.tr() : name;
 
+  bool get isDocument => pluginType == PluginType.document;
+  bool get isDatabase => [
+        PluginType.grid,
+        PluginType.board,
+        PluginType.calendar,
+      ].contains(pluginType);
+
   Widget defaultIcon({Size? size}) => FlowySvg(
         switch (layout) {
           ViewLayoutPB.Board => FlowySvgs.icon_board_s,
@@ -327,6 +334,7 @@ extension ViewLayoutExtension on ViewLayoutPB {
 
   bool get shrinkWrappable => switch (this) {
         ViewLayoutPB.Grid => true,
+        ViewLayoutPB.Board => true,
         _ => false,
       };
 

@@ -22,7 +22,7 @@ use collab_integrate::collab_builder::{
 };
 use flowy_ai_pub::cloud::{
   ChatCloudService, ChatMessage, ChatMessageMetadata, ChatMessageType, ChatSettings,
-  CompleteTextParams, LocalAIConfig, MessageCursor, RepeatedChatMessage, ResponseFormat,
+  CompleteTextParams, LocalAIConfig, MessageCursor, ModelList, RepeatedChatMessage, ResponseFormat,
   StreamAnswer, StreamComplete, SubscriptionPlan, UpdateChatParams,
 };
 use flowy_database_pub::cloud::{
@@ -781,7 +781,7 @@ impl ChatCloudService for ServerProvider {
       .await
   }
 
-  async fn index_file(
+  async fn embed_file(
     &self,
     workspace_id: &str,
     file_path: &Path,
@@ -791,7 +791,7 @@ impl ChatCloudService for ServerProvider {
     self
       .get_server()?
       .chat_service()
-      .index_file(workspace_id, file_path, chat_id, metadata)
+      .embed_file(workspace_id, file_path, chat_id, metadata)
       .await
   }
 
@@ -836,6 +836,14 @@ impl ChatCloudService for ServerProvider {
       .get_server()?
       .chat_service()
       .update_chat_settings(workspace_id, chat_id, params)
+      .await
+  }
+
+  async fn get_available_models(&self, workspace_id: &str) -> Result<ModelList, FlowyError> {
+    self
+      .get_server()?
+      .chat_service()
+      .get_available_models(workspace_id)
       .await
   }
 }

@@ -15,12 +15,10 @@ class ChatUserMessageWidget extends StatelessWidget {
     super.key,
     required this.user,
     required this.message,
-    required this.isCurrentUser,
   });
 
   final User user;
   final TextMessage message;
-  final bool isCurrentUser;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +32,6 @@ class ChatUserMessageWidget extends StatelessWidget {
       ),
       child: ChatUserMessageBubble(
         message: message,
-        isCurrentUser: isCurrentUser,
         files: _getFiles(),
         child: BlocBuilder<ChatUserMessageBloc, ChatUserMessageState>(
           builder: (context, state) {
@@ -83,7 +80,6 @@ class TextMessageText extends StatelessWidget {
       text,
       lineHeight: 1.4,
       maxLines: null,
-      selectable: true,
       color: AFThemeExtension.of(context).textColor,
     );
   }

@@ -8,7 +8,7 @@ use client_api::entity::chat_dto::{
 };
 use flowy_ai_pub::cloud::{
   ChatCloudService, ChatMessage, ChatMessageMetadata, ChatMessageType, ChatSettings, LocalAIConfig,
-  StreamAnswer, StreamComplete, SubscriptionPlan, UpdateChatParams,
+  ModelList, StreamAnswer, StreamComplete, SubscriptionPlan, UpdateChatParams,
 };
 use flowy_error::FlowyError;
 use futures_util::{StreamExt, TryStreamExt};
@@ -200,7 +200,7 @@ where
     Ok(stream.boxed())
   }
 
-  async fn index_file(
+  async fn embed_file(
     &self,
     _workspace_id: &str,
     _file_path: &Path,
@@ -269,5 +269,14 @@ where
       .update_chat_settings(workspace_id, chat_id, params)
       .await?;
     Ok(())
+  }
+
+  async fn get_available_models(&self, workspace_id: &str) -> Result<ModelList, FlowyError> {
+    let list = self
+      .inner
+      .try_get_client()?
+      .get_model_list(workspace_id)
+      .await?;
+    Ok(list)
   }
 }

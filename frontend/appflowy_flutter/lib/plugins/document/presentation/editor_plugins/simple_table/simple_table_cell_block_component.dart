@@ -47,6 +47,10 @@ class SimpleTableCellBlockComponentBuilder extends BlockComponentBuilder {
         blockComponentContext,
         state,
       ),
+      actionTrailingBuilder: (context, state) => actionTrailingBuilder(
+        blockComponentContext,
+        state,
+      ),
     );
   }
 
@@ -60,6 +64,7 @@ class SimpleTableCellBlockWidget extends BlockComponentStatefulWidget {
     required super.node,
     super.showActions,
     super.actionBuilder,
+    super.actionTrailingBuilder,
     super.configuration = const BlockComponentConfiguration(),
     required this.alwaysDistributeColumnWidths,
   });
@@ -468,7 +473,7 @@ class SimpleTableCellBlockWidgetState extends State<SimpleTableCellBlockWidget>
     final isSelectingTable =
         simpleTableContext?.isSelectingTable.value ?? false;
     if (isSelectingTable) {
-      return Theme.of(context).colorScheme.primary.withOpacity(0.1);
+      return Theme.of(context).colorScheme.primary.withValues(alpha: 0.1);
     }
 
     final columnColor = node.buildColumnColor(context);

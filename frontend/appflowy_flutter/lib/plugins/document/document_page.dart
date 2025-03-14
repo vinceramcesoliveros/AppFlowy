@@ -1,3 +1,4 @@
+import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/mobile/application/page_style/document_page_style_bloc.dart';
 import 'package:appflowy/plugins/document/application/document_appearance_cubit.dart';
 import 'package:appflowy/plugins/document/application/document_bloc.dart';
@@ -10,14 +11,17 @@ import 'package:appflowy/plugins/document/presentation/editor_plugins/shared_con
 import 'package:appflowy/plugins/document/presentation/editor_plugins/transaction_handler/editor_transaction_service.dart';
 import 'package:appflowy/plugins/document/presentation/editor_style.dart';
 import 'package:appflowy/shared/flowy_error_page.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/workspace/application/action_navigation/action_navigation_bloc.dart';
 import 'package:appflowy/workspace/application/action_navigation/navigation_action.dart';
 import 'package:appflowy/workspace/application/view/prelude.dart';
 import 'package:appflowy/workspace/application/view/view_ext.dart';
+import 'package:appflowy/workspace/application/view/view_lock_status_bloc.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
@@ -28,6 +32,7 @@ class DocumentPage extends StatefulWidget {
     super.key,
     required this.view,
     required this.onDeleted,
+    required this.tabs,
     this.initialSelection,
     this.initialBlockId,
     this.fixedTitle,
@@ -38,6 +43,7 @@ class DocumentPage extends StatefulWidget {
   final Selection? initialSelection;
   final String? initialBlockId;
   final String? fixedTitle;
+  final List<PickerTabType> tabs;
 
   @override
   State<DocumentPage> createState() => _DocumentPageState();
@@ -49,6 +55,8 @@ class _DocumentPageState extends State<DocumentPage>
   Selection? initialSelection;
   late final documentBloc = DocumentBloc(documentId: widget.view.id)
     ..add(const DocumentEvent.initial());
+  late final viewBloc = ViewBloc(view: widget.view)
+    ..add(const ViewEvent.initial());
 
   @override
   void initState() {
@@ -60,6 +68,8 @@ class _DocumentPageState extends State<DocumentPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     documentBloc.close();
+    viewBloc.close();
+
     super.dispose();
   }
 
@@ -79,31 +89,55 @@ class _DocumentPageState extends State<DocumentPage>
       providers: [
         BlocProvider.value(value: getIt<ActionNavigationBloc>()),
         BlocProvider.value(value: documentBloc),
+        BlocProvider.value(
+          value: ViewLockStatusBloc(view: widget.view)
+            ..add(ViewLockStatusEvent.initial()),
+        ),
+        BlocProvider.value(value: viewBloc),
       ],
-      child: BlocBuilder<DocumentBloc, DocumentState>(
-        buildWhen: shouldRebuildDocument,
-        builder: (context, state) {
-          if (state.isLoading) {
-            return const Center(child: CircularProgressIndicator.adaptive());
+      child: BlocConsumer<ViewLockStatusBloc, ViewLockStatusState>(
+        listenWhen: (prev, curr) => curr.isLocked != prev.isLocked,
+        listener: (context, lockStatusState) {
+          if (lockStatusState.isLoadingLockStatus) {
+            return;
           }
+          editorState?.editable = !lockStatusState.isLocked;
+        },
+        builder: (context, lockStatusState) {
+          return BlocBuilder<DocumentBloc, DocumentState>(
+            buildWhen: shouldRebuildDocument,
+            builder: (context, state) {
+              if (state.isLoading) {
+                return const Center(
+                  child: CircularProgressIndicator.adaptive(),
+                );
+              }
 
-          final editorState = state.editorState;
-          this.editorState = editorState;
-          final error = state.error;
-          if (error != null || editorState == null) {
-            Log.error(error);
-            return Center(child: AppFlowyErrorPage(error: error));
-          }
+              final editorState = state.editorState;
+              this.editorState = editorState;
+              final error = state.error;
+              if (error != null || editorState == null) {
+                Log.error(error);
+                return Center(child: AppFlowyErrorPage(error: error));
+              }
 
-          if (state.forceClose) {
-            widget.onDeleted();
-            return const SizedBox.shrink();
-          }
+              if (state.forceClose) {
+                widget.onDeleted();
+                return const SizedBox.shrink();
+              }
 
-          return BlocListener<ActionNavigationBloc, ActionNavigationState>(
-            listenWhen: (_, curr) => curr.action != null,
-            listener: onNotificationAction,
-            child: buildEditorPage(context, state),
+              return BlocListener<ViewLockStatusBloc, ViewLockStatusState>(
+                listener: (context, state) {
+                  editorState.editable = !state.isLocked;
+                },
+                child:
+                    BlocListener<ActionNavigationBloc, ActionNavigationState>(
+                  listenWhen: (_, curr) => curr.action != null,
+                  listener: onNotificationAction,
+                  child: buildEditorPage(context, state),
+                ),
+              );
+            },
           );
         },
       ),
@@ -135,6 +169,7 @@ class _DocumentPageState extends State<DocumentPage>
             context: context,
             width: width,
             padding: EditorStyleCustomizer.documentPadding,
+            editorState: editorState,
           ),
           header: buildCoverAndIcon(context, state),
           initialSelection: initialSelection,
@@ -153,9 +188,14 @@ class _DocumentPageState extends State<DocumentPage>
             context: context,
             width: width,
             padding: EditorStyleCustomizer.documentPadding,
+            editorState: editorState,
           ),
           header: buildCoverAndIcon(context, state),
           initialSelection: initialSelection,
+          placeholderText: (node) =>
+              node.type == ParagraphBlockKeys.type && !node.isInTable
+                  ? LocaleKeys.editor_slashPlaceHolder.tr()
+                  : '',
         ),
       );
     }
@@ -178,7 +218,9 @@ class _DocumentPageState extends State<DocumentPage>
         editorState: state.editorState!,
         child: Column(
           children: [
-            if (state.isDeleted) buildBanner(context),
+            // the banner only shows on desktop
+            if (state.isDeleted && UniversalPlatform.isDesktop)
+              buildBanner(context),
             Expanded(child: child),
           ],
         ),
@@ -208,6 +250,7 @@ class _DocumentPageState extends State<DocumentPage>
       return DocumentImmersiveCover(
         fixedTitle: widget.fixedTitle,
         view: widget.view,
+        tabs: widget.tabs,
         userProfilePB: userProfilePB,
       );
     }
@@ -215,10 +258,11 @@ class _DocumentPageState extends State<DocumentPage>
     final page = editorState.document.root;
     return DocumentCoverWidget(
       node: page,
+      tabs: widget.tabs,
       editorState: editorState,
       view: widget.view,
       onIconChanged: (icon) async => ViewBackendService.updateViewIcon(
-        viewId: widget.view.id,
+        view: widget.view,
         viewIcon: icon,
       ),
     );

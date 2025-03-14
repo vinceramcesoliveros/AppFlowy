@@ -6,11 +6,11 @@ import 'package:appflowy/mobile/presentation/home/tab/_tab_bar.dart';
 import 'package:appflowy/mobile/presentation/home/tab/space_order_bloc.dart';
 import 'package:appflowy/mobile/presentation/presentation.dart';
 import 'package:appflowy/mobile/presentation/setting/workspace/invite_members_screen.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
 import 'package:appflowy/workspace/application/menu/sidebar_sections_bloc.dart';
 import 'package:appflowy/workspace/application/sidebar/folder/folder_bloc.dart';
 import 'package:appflowy/workspace/application/sidebar/space/space_bloc.dart';
 import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
-import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
@@ -72,7 +72,14 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
             listener: (context, state) {
               final lastCreatedPage = state.lastCreatedPage;
               if (lastCreatedPage != null) {
-                context.pushView(lastCreatedPage);
+                context.pushView(
+                  lastCreatedPage,
+                  tabs: [
+                    PickerTabType.emoji,
+                    PickerTabType.icon,
+                    PickerTabType.custom,
+                  ].map((e) => e.name).toList(),
+                );
               }
             },
           ),
@@ -82,7 +89,14 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
             listener: (context, state) {
               final lastCreatedPage = state.lastCreatedRootView;
               if (lastCreatedPage != null) {
-                context.pushView(lastCreatedPage);
+                context.pushView(
+                  lastCreatedPage,
+                  tabs: [
+                    PickerTabType.emoji,
+                    PickerTabType.icon,
+                    PickerTabType.custom,
+                  ].map((e) => e.name).toList(),
+                );
               }
             },
           ),
@@ -165,8 +179,6 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
           );
         case MobileSpaceTabType.favorites:
           return MobileFavoriteSpace(userProfile: widget.userProfile);
-        default:
-          throw Exception('Unknown tab type: $tab');
       }
     }).toList();
   }
@@ -180,7 +192,7 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
     if (context.read<SpaceBloc>().state.spaces.isNotEmpty) {
       context.read<SpaceBloc>().add(
             SpaceEvent.createPage(
-              name: layout.defaultName,
+              name: '',
               layout: layout,
               openAfterCreate: true,
             ),
@@ -189,7 +201,7 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
       // only support create document in section
       context.read<SidebarSectionsBloc>().add(
             SidebarSectionsEvent.createRootViewInSection(
-              name: layout.defaultName,
+              name: '',
               index: 0,
               viewSection: FolderSpaceType.public.toViewSectionPB,
             ),
