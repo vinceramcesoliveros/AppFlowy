@@ -49,7 +49,6 @@ pub fn init(user_manager: Weak<UserManager>) -> AFPlugin {
     .event(UserEvent::GetAllReminders, get_all_reminder_event_handler)
     .event(UserEvent::RemoveReminder, remove_reminder_event_handler)
     .event(UserEvent::UpdateReminder, update_reminder_event_handler)
-    .event(UserEvent::ResetWorkspace, reset_workspace_handler)
     .event(UserEvent::SetDateTimeSettings, set_date_time_settings)
     .event(UserEvent::GetDateTimeSettings, get_date_time_settings)
     .event(UserEvent::SetNotificationSettings, set_notification_settings)
@@ -81,18 +80,18 @@ pub fn init(user_manager: Weak<UserManager>) -> AFPlugin {
     .event(UserEvent::UpdateWorkspaceSetting, update_workspace_setting)
     .event(UserEvent::GetWorkspaceSetting, get_workspace_setting)
     .event(UserEvent::NotifyDidSwitchPlan, notify_did_switch_plan_handler)
-
+    .event(UserEvent::PasscodeSignIn, sign_in_with_passcode_handler)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Display, Hash, ProtoBuf_Enum, Flowy_Event)]
 #[event_err = "FlowyError"]
 pub enum UserEvent {
-  /// Only use when the [Authenticator] is Local or SelfHosted
+  /// Only use when the [AuthType] is Local or SelfHosted
   /// Logging into an account using a register email and password
-  #[event(input = "SignInPayloadPB", output = "UserProfilePB")]
+  #[event(input = "SignInPayloadPB", output = "GotrueTokenResponsePB")]
   SignInWithEmailPassword = 0,
 
-  /// Only use when the [Authenticator] is Local or SelfHosted
+  /// Only use when the [AuthType] is Local or SelfHosted
   /// Creating a new account
   #[event(input = "SignUpPayloadPB", output = "UserProfilePB")]
   SignUp = 1,
@@ -130,7 +129,7 @@ pub enum UserEvent {
   OauthSignIn = 10,
 
   /// Get the OAuth callback url
-  /// Only use when the [Authenticator] is AFCloud
+  /// Only use when the [AuthType] is AFCloud
   #[event(input = "SignInUrlPayloadPB", output = "SignInUrlPB")]
   GenerateSignInURL = 11,
 
@@ -166,7 +165,7 @@ pub enum UserEvent {
   OpenAnonUser = 26,
 
   /// Push a realtime event to the user. Currently, the realtime event
-  /// is only used when the auth type is: [Authenticator::Supabase].
+  /// is only used when the auth type is: [AuthType::Supabase].
   ///
   #[event(input = "RealtimePayloadPB")]
   PushRealtimeEvent = 27,
@@ -182,9 +181,6 @@ pub enum UserEvent {
 
   #[event(input = "ReminderPB")]
   UpdateReminder = 31,
-
-  #[event(input = "ResetWorkspacePB")]
-  ResetWorkspace = 32,
 
   /// Change the Date/Time formats globally
   #[event(input = "DateTimeSettingsPB")]
@@ -278,23 +274,26 @@ pub enum UserEvent {
 
   #[event()]
   DeleteAccount = 64,
+
+  #[event(input = "PasscodeSignInPB", output = "GotrueTokenResponsePB")]
+  PasscodeSignIn = 65,
 }
 
 #[async_trait]
 pub trait UserStatusCallback: Send + Sync + 'static {
-  /// When the [Authenticator] changed, this method will be called. Currently, the auth type
+  /// When the [AuthType] changed, this method will be called. Currently, the auth type
   /// will be changed when the user sign in or sign up.
-  fn authenticator_did_changed(&self, _authenticator: Authenticator) {}
+  fn authenticator_did_changed(&self, _authenticator: AuthType) {}
   /// This will be called after the application launches if the user is already signed in.
   /// If the user is not signed in, this method will not be called
   async fn did_init(
     &self,
     _user_id: i64,
-    _user_authenticator: &Authenticator,
+    _user_authenticator: &AuthType,
     _cloud_config: &Option<UserCloudConfig>,
     _user_workspace: &UserWorkspace,
     _device_id: &str,
-    _authenticator: &Authenticator,
+    _authenticator: &AuthType,
   ) -> FlowyResult<()> {
     Ok(())
   }
@@ -304,7 +303,7 @@ pub trait UserStatusCallback: Send + Sync + 'static {
     _user_id: i64,
     _user_workspace: &UserWorkspace,
     _device_id: &str,
-    _authenticator: &Authenticator,
+    _authenticator: &AuthType,
   ) -> FlowyResult<()> {
     Ok(())
   }
@@ -315,7 +314,7 @@ pub trait UserStatusCallback: Send + Sync + 'static {
     _user_profile: &UserProfile,
     _user_workspace: &UserWorkspace,
     _device_id: &str,
-    _authenticator: &Authenticator,
+    _auth_type: &AuthType,
   ) -> FlowyResult<()> {
     Ok(())
   }
@@ -327,7 +326,7 @@ pub trait UserStatusCallback: Send + Sync + 'static {
     &self,
     _user_id: i64,
     _user_workspace: &UserWorkspace,
-    _authenticator: &Authenticator,
+    _authenticator: &AuthType,
   ) -> FlowyResult<()> {
     Ok(())
   }

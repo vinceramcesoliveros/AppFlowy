@@ -17,9 +17,9 @@ import 'package:appflowy/workspace/application/sidebar/rename_view/rename_view_b
 import 'package:appflowy/workspace/application/tabs/tabs_bloc.dart';
 import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy/workspace/presentation/command_palette/command_palette.dart';
-import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/theme.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
@@ -64,7 +64,6 @@ class InitAppWidgetTask extends LaunchTask {
       child: widget,
     );
 
-    Bloc.observer = ApplicationBlocObserver();
     runApp(
       EasyLocalization(
         supportedLocales: const [
@@ -100,6 +99,7 @@ class InitAppWidgetTask extends LaunchTask {
           Locale('zh', 'TW'),
           Locale('fa'),
           Locale('hin'),
+          Locale('mr', 'IN'),
         ],
         path: 'assets/translations',
         fallbackLocale: const Locale('en'),
@@ -226,22 +226,6 @@ class _ApplicationWidgetState extends State<ApplicationWidget> {
                     }
                   },
                   child: MaterialApp.router(
-                    builder: (context, child) => MediaQuery(
-                      // use the 1.0 as the textScaleFactor to avoid the text size
-                      //  affected by the system setting.
-                      data: MediaQuery.of(context).copyWith(
-                        textScaler: TextScaler.linear(state.textScaleFactor),
-                      ),
-                      child: overlayManagerBuilder(
-                        context,
-                        !UniversalPlatform.isMobile && FeatureFlag.search.isOn
-                            ? CommandPalette(
-                                notifier: _commandPaletteNotifier,
-                                child: child,
-                              )
-                            : child,
-                      ),
-                    ),
                     debugShowCheckedModeBanner: false,
                     theme: state.lightTheme,
                     darkTheme: state.darkTheme,
@@ -250,6 +234,34 @@ class _ApplicationWidgetState extends State<ApplicationWidget> {
                     supportedLocales: context.supportedLocales,
                     locale: state.locale,
                     routerConfig: routerConfig,
+                    builder: (context, child) {
+                      final themeBuilder = AppFlowyDefaultTheme();
+                      final brightness = Theme.of(context).brightness;
+
+                      return AnimatedAppFlowyTheme(
+                        data: brightness == Brightness.light
+                            ? themeBuilder.light()
+                            : themeBuilder.dark(),
+                        child: MediaQuery(
+                          // use the 1.0 as the textScaleFactor to avoid the text size
+                          //  affected by the system setting.
+                          data: MediaQuery.of(context).copyWith(
+                            textScaler:
+                                TextScaler.linear(state.textScaleFactor),
+                          ),
+                          child: overlayManagerBuilder(
+                            context,
+                            !UniversalPlatform.isMobile &&
+                                    FeatureFlag.search.isOn
+                                ? CommandPalette(
+                                    notifier: _commandPaletteNotifier,
+                                    child: child,
+                                  )
+                                : child,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -281,14 +293,6 @@ class AppGlobals {
   static NavigatorState get nav => rootNavKey.currentState!;
 
   static BuildContext get context => rootNavKey.currentContext!;
-}
-
-class ApplicationBlocObserver extends BlocObserver {
-  @override
-  void onError(BlocBase bloc, Object error, StackTrace stackTrace) {
-    Log.debug(error);
-    super.onError(bloc, error, stackTrace);
-  }
 }
 
 Future<AppTheme> appTheme(String themeName) async {

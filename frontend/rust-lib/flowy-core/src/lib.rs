@@ -1,20 +1,21 @@
 #![allow(unused_doc_comments)]
 
-use flowy_search::folder::indexer::FolderIndexManagerImpl;
-use flowy_search::services::manager::SearchManager;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
-use sysinfo::System;
-use tokio::sync::RwLock;
-use tracing::{debug, error, event, info, instrument};
-
-use collab_integrate::collab_builder::{AppFlowyCollabBuilder, CollabPluginProviderType};
+use collab_integrate::collab_builder::AppFlowyCollabBuilder;
 use flowy_ai::ai_manager::AIManager;
 use flowy_database2::DatabaseManager;
 use flowy_document::manager::DocumentManager;
 use flowy_error::{FlowyError, FlowyResult};
 use flowy_folder::manager::FolderManager;
-use flowy_server::af_cloud::define::ServerUser;
+use flowy_search::folder::indexer::FolderIndexManagerImpl;
+use flowy_search::services::manager::SearchManager;
+use flowy_server::af_cloud::define::LoginUserService;
+use std::path::PathBuf;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+use sysinfo::System;
+use tokio::sync::RwLock;
+use tracing::{debug, error, event, info, instrument};
+use uuid::Uuid;
 
 use flowy_sqlite::kv::KVStorePreferences;
 use flowy_storage::manager::StorageManager;
@@ -33,8 +34,10 @@ use crate::config::AppFlowyCoreConfig;
 use crate::deps_resolve::file_storage_deps::FileStorageResolver;
 use crate::deps_resolve::*;
 use crate::log_filter::init_log;
-use crate::server_layer::{current_server_type, Server, ServerProvider};
+use crate::server_layer::{current_server_type, ServerProvider};
 use deps_resolve::reminder_deps::CollabInteractImpl;
+use flowy_sqlite::DBConnection;
+use lib_infra::async_trait::async_trait;
 use user_state_callback::UserStatusCallbackImpl;
 
 pub mod config;
@@ -105,6 +108,8 @@ impl AppFlowyCore {
 
   #[instrument(skip(config, runtime))]
   async fn init(config: AppFlowyCoreConfig, runtime: Arc<AFPluginRuntime>) -> Self {
+    config.ensure_path();
+
     // Init the key value database
     let store_preference = Arc::new(KVStorePreferences::new(&config.storage_path).unwrap());
     info!("🔥{:?}", &config);
@@ -126,12 +131,12 @@ impl AppFlowyCore {
       store_preference.clone(),
     ));
 
-    let server_type = current_server_type();
-    debug!("🔥runtime:{}, server:{}", runtime, server_type);
+    let auth_type = current_server_type();
+    debug!("🔥runtime:{}, server:{}", runtime, auth_type);
 
     let server_provider = Arc::new(ServerProvider::new(
       config.clone(),
-      server_type,
+      auth_type,
       Arc::downgrade(&store_preference),
       ServerUserImpl(Arc::downgrade(&authenticate_user)),
     ));
@@ -163,9 +168,9 @@ impl AppFlowyCore {
       collab_builder
         .set_snapshot_persistence(Arc::new(SnapshotDBImpl(Arc::downgrade(&authenticate_user))));
 
-      let folder_indexer = Arc::new(FolderIndexManagerImpl::new(Some(Arc::downgrade(
+      let folder_indexer = Arc::new(FolderIndexManagerImpl::new(Arc::downgrade(
         &authenticate_user,
-      ))));
+      )));
 
       let folder_manager = FolderDepsResolver::resolve(
         Arc::downgrade(&authenticate_user),
@@ -188,6 +193,7 @@ impl AppFlowyCore {
         Arc::downgrade(&storage_manager.storage_service),
         server_provider.clone(),
         folder_query_service.clone(),
+        server_provider.local_ai.clone(),
       );
 
       let database_manager = DatabaseDepsResolver::resolve(
@@ -308,15 +314,6 @@ impl AppFlowyCore {
   }
 }
 
-impl From<Server> for CollabPluginProviderType {
-  fn from(server_type: Server) -> Self {
-    match server_type {
-      Server::Local => CollabPluginProviderType::Local,
-      Server::AppFlowyCloud => CollabPluginProviderType::AppFlowyCloud,
-    }
-  }
-}
-
 struct ServerUserImpl(Weak<AuthenticateUser>);
 
 impl ServerUserImpl {
@@ -328,8 +325,28 @@ impl ServerUserImpl {
     Ok(user)
   }
 }
-impl ServerUser for ServerUserImpl {
-  fn workspace_id(&self) -> FlowyResult<String> {
+
+#[async_trait]
+impl LoginUserService for ServerUserImpl {
+  fn workspace_id(&self) -> FlowyResult<Uuid> {
     self.upgrade_user()?.workspace_id()
+  }
+
+  fn user_id(&self) -> FlowyResult<i64> {
+    self.upgrade_user()?.user_id()
+  }
+
+  async fn is_local_mode(&self) -> FlowyResult<bool> {
+    self.upgrade_user()?.is_local_mode().await
+  }
+
+  fn get_sqlite_db(&self, uid: i64) -> Result<DBConnection, FlowyError> {
+    self.upgrade_user()?.get_sqlite_connection(uid)
+  }
+
+  fn application_root_dir(&self) -> Result<PathBuf, FlowyError> {
+    Ok(PathBuf::from(
+      self.upgrade_user()?.get_application_root_dir(),
+    ))
   }
 }

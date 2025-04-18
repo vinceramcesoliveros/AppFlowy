@@ -1,7 +1,9 @@
+import 'package:appflowy/ai/ai.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy_backend/protobuf/flowy-ai/protobuf.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 
 import '../ai_writer_block_component.dart';
@@ -90,7 +92,7 @@ enum AiWriterCommand {
 
   FlowySvgData get icon => switch (this) {
         userQuestion => FlowySvgs.ai_sparks_s,
-        explain => FlowySvgs.ai_explain_s,
+        explain => FlowySvgs.ai_explain_m,
         // summarize => FlowySvgs.ai_summarize_s,
         continueWriting || improveWriting => FlowySvgs.ai_improve_writing_s,
         fixSpellingAndGrammar => FlowySvgs.ai_fix_spelling_grammar_s,
@@ -119,4 +121,39 @@ enum ApplySuggestionFormatType {
   final String? value;
 
   Map<String, dynamic> get attributes => {AiWriterBlockKeys.suggestion: value};
+}
+
+enum AiRole {
+  user,
+  system,
+  ai,
+}
+
+class AiWriterRecord extends Equatable {
+  const AiWriterRecord.user({
+    required this.content,
+    required this.format,
+  }) : role = AiRole.user;
+
+  const AiWriterRecord.ai({
+    required this.content,
+  })  : role = AiRole.ai,
+        format = null;
+
+  final AiRole role;
+  final String content;
+  final PredefinedFormat? format;
+
+  @override
+  List<Object?> get props => [role, content, format];
+
+  CompletionRecordPB toPB() {
+    return CompletionRecordPB(
+      content: content,
+      role: switch (role) {
+        AiRole.user => ChatMessageTypePB.User,
+        AiRole.system || AiRole.ai => ChatMessageTypePB.System,
+      },
+    );
+  }
 }

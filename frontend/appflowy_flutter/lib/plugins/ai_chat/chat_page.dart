@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:appflowy/ai/ai.dart';
-import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/ai_chat/presentation/chat_message_selector_banner.dart';
 import 'package:appflowy/workspace/application/view/view_service.dart';
 import 'package:appflowy_backend/log.dart';
@@ -9,8 +8,6 @@ import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:appflowy_result/appflowy_result.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:easy_localization/easy_localization.dart';
-import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -51,14 +48,14 @@ class AIChatPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (userProfile.authenticator != AuthenticatorPB.AppFlowyCloud) {
-      return Center(
-        child: FlowyText(
-          LocaleKeys.chat_unsupportedCloudPrompt.tr(),
-          fontSize: 20,
-        ),
-      );
-    }
+    // if (userProfile.authenticator != AuthenticatorPB.AppFlowyCloud) {
+    //   return Center(
+    //     child: FlowyText(
+    //       LocaleKeys.chat_unsupportedCloudPrompt.tr(),
+    //       fontSize: 20,
+    //     ),
+    //   );
+    // }
 
     return MultiBlocProvider(
       providers: [
@@ -73,6 +70,7 @@ class AIChatPage extends StatelessWidget {
         /// [AIPromptInputBloc] is used to handle the user prompt
         BlocProvider(
           create: (_) => AIPromptInputBloc(
+            objectId: view.id,
             predefinedFormat: PredefinedFormat(
               imageFormat: ImageFormat.text,
               textFormat: TextFormat.bulletList,
@@ -264,10 +262,13 @@ class _ChatContentPage extends StatelessWidget {
                   _onSelectMetadata(context, metadata),
               onRegenerate: () => context
                   .read<ChatBloc>()
-                  .add(ChatEvent.regenerateAnswer(message.id, null)),
+                  .add(ChatEvent.regenerateAnswer(message.id, null, null)),
               onChangeFormat: (format) => context
                   .read<ChatBloc>()
-                  .add(ChatEvent.regenerateAnswer(message.id, format)),
+                  .add(ChatEvent.regenerateAnswer(message.id, format, null)),
+              onChangeModel: (model) => context
+                  .read<ChatBloc>()
+                  .add(ChatEvent.regenerateAnswer(message.id, null, model)),
               onStopStream: () => context.read<ChatBloc>().add(
                     const ChatEvent.stopStream(),
                   ),
@@ -354,35 +355,55 @@ class _ChatContentPage extends StatelessWidget {
     BuildContext context,
     ChatMessageRefSource metadata,
   ) async {
-    if (isURL(metadata.name)) {
-      late Uri uri;
-      try {
-        uri = Uri.parse(metadata.name);
-        // `Uri` identifies `localhost` as a scheme
-        if (!uri.hasScheme || uri.scheme == 'localhost') {
-          uri = Uri.parse("http://${metadata.name}");
-          await InternetAddress.lookup(uri.host);
-        }
-        await launchUrl(uri);
-      } catch (err) {
-        Log.error("failed to open url $err");
-      }
-    } else {
+    // When the source of metatdata is appflowy, which means it is a appflowy page
+    if (metadata.source == "appflowy") {
       final sidebarView =
           await ViewBackendService.getView(metadata.id).toNullable();
       if (context.mounted) {
         openPageFromMessage(context, sidebarView);
       }
+      return;
+    }
+
+    if (metadata.source == "web") {
+      if (isURL(metadata.name)) {
+        late Uri uri;
+        try {
+          uri = Uri.parse(metadata.name);
+          // `Uri` identifies `localhost` as a scheme
+          if (!uri.hasScheme || uri.scheme == 'localhost') {
+            uri = Uri.parse("http://${metadata.name}");
+            await InternetAddress.lookup(uri.host);
+          }
+          await launchUrl(uri);
+        } catch (err) {
+          Log.error("failed to open url $err");
+        }
+      }
+      return;
     }
   }
 }
 
-class _Input extends StatelessWidget {
+class _Input extends StatefulWidget {
   const _Input({
     required this.view,
   });
 
   final ViewPB view;
+
+  @override
+  State<_Input> createState() => _InputState();
+}
+
+class _InputState extends State<_Input> {
+  final textController = TextEditingController();
+
+  @override
+  void dispose() {
+    textController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +434,7 @@ class _Input extends StatelessWidget {
                       return UniversalPlatform.isDesktop
                           ? DesktopPromptInput(
                               isStreaming: !canSendMessage,
+                              textController: textController,
                               onStopStreaming: () {
                                 chatBloc.add(const ChatEvent.stopStream());
                               },

@@ -36,7 +36,9 @@
     "loginButtonText": "Login",
     "loginStartWithAnonymous": "Continue with an anonymous session",
     "continueAnonymousUser": "Continue with an anonymous session",
-    "anonymous": "Anonymous",
+    "continueWithLocalModel": "Continue with local model",
+    "switchToAppFlowyCloud": "AppFlowy Cloud",
+    "anonymousMode": "Anonymous mode",
     "buttonText": "Sign In",
     "signingInText": "Signing in...",
     "forgotPassword": "Forgot Password?",
@@ -47,7 +49,7 @@
     "repeatPasswordEmptyError": "Repeat password can't be empty",
     "unmatchedPasswordError": "Repeat password is not the same as password",
     "syncPromptMessage": "Syncing the data might take a while. Please don't close this page",
-    "or": "OR",
+    "or": "or",
     "signInWithGoogle": "Continue with Google",
     "signInWithGithub": "Continue with GitHub",
     "signInWithDiscord": "Continue with Discord",
@@ -68,7 +70,22 @@
     "logIn": "Log in",
     "generalError": "Something went wrong. Please try again later",
     "limitRateError": "For security reasons, you can only request a magic link every 60 seconds",
-    "magicLinkSentDescription": "A Magic Link was sent to your email. Click the link to complete your login. The link will expire after 5 minutes."
+    "magicLinkSentDescription": "A Magic Link was sent to your email. Click the link to complete your login. The link will expire after 5 minutes.",
+    "tokenHasExpiredOrInvalid": "The code has expired or is invalid. Please try again.",
+    "signingIn": "Signing in...",
+    "checkYourEmail": "Check your email",
+    "temporaryVerificationLinkSent": "A temporary verification link has been sent.\nPlease check your inbox at",
+    "temporaryVerificationCodeSent": "A temporary verification code has been sent.\nPlease check your inbox at",
+    "continueToSignIn": "Continue to sign in",
+    "backToLogin": "Back to login",
+    "enterCode": "Enter code",
+    "enterCodeManually": "Enter code manually",
+    "continueWithEmail": "Continue with email",
+    "enterPassword": "Enter password",
+    "loginAs": "Login as",
+    "invalidVerificationCode": "Please enter a valid verification code",
+    "tooFrequentVerificationCodeRequest": "You have made too many requests. Please try again later.",
+    "invalidLoginCredentials": "Your password is incorrect, please try again"
   },
   "workspace": {
     "chooseWorkspace": "Choose your workspace",
@@ -246,11 +263,17 @@
       "number": "Numbered list",
       "table": "Table",
       "blankDescription": "Format response",
-      "defaultDescription": "Auto mode",
+      "defaultDescription": "Auto response format",
       "textWithImageDescription": "@:chat.changeFormat.text with image",
       "numberWithImageDescription": "@:chat.changeFormat.number with image",
       "bulletWithImageDescription": "@:chat.changeFormat.bullet with image",
       "tableWithImageDescription": "@:chat.changeFormat.table with image"
+    },
+    "switchModel": {
+      "label": "Switch model",
+      "localModel": "Local Model",
+      "cloudModel": "Cloud Model",
+      "autoModel": "Auto"
     },
     "selectBanner": {
       "saveButton": "Add to …",
@@ -259,7 +282,6 @@
       "allSelected": "All selected"
     },
     "stopTooltip": "Stop generating"
-
   },
   "trash": {
     "text": "Trash",
@@ -302,7 +324,8 @@
   "questionBubble": {
     "shortcuts": "Shortcuts",
     "whatsNew": "What's new?",
-    "help": "Help & Support",
+    "helpAndDocumentation": "Help & documentation",
+    "getSupport": "Get support",
     "markdown": "Markdown",
     "debug": {
       "name": "Debug Info",
@@ -502,7 +525,8 @@
       "settings": "Settings",
       "members": "Members",
       "trash": "Trash",
-      "helpAndSupport": "Help & Support"
+      "helpAndDocumentation": "Help & documentation",
+      "getSupport": "Get Support"
     },
     "sites": {
       "title": "Sites",
@@ -621,7 +645,8 @@
       "theme": {
         "title": "Theme",
         "description": "Select a preset theme, or upload your own custom theme.",
-        "uploadCustomThemeTooltip": "Upload a custom theme"
+        "uploadCustomThemeTooltip": "Upload a custom theme",
+        "failedToLoadThemes": "Failed to load themes, please check your permission settings in System Settings > Privacy and Security > Files and Folders > @:appName"
       },
       "workspaceFont": {
         "title": "Workspace font",
@@ -838,7 +863,7 @@
       "menuLabel": "AI Settings",
       "keys": {
         "enableAISearchTitle": "AI Search",
-        "aiSettingsDescription": "Choose your preferred model to power AppFlowy AI. Now includes GPT 4-o, Claude 3,5, Llama 3.1, and Mistral 7B",
+        "aiSettingsDescription": "Choose your preferred model to power AppFlowy AI. Now includes GPT-4o, GPT-o3-mini, DeepSeek R1, Claude 3.5 Sonnet, and models available in Ollama",
         "loginToEnableAIFeature": "AI features are only enabled after logging in with @:appName Cloud. If you don't have an @:appName account, go to 'My Account' to sign up",
         "llmModel": "Language Model",
         "llmModelType": "Language Model Type",
@@ -849,16 +874,20 @@
         "downloadAIModelButton": "Download",
         "downloadingModel": "Downloading",
         "localAILoaded": "Local AI Model successfully added and ready to use",
-        "localAIStart": "Local AI is starting...",
+        "localAIStart": "Local AI is starting. If it's slow, try toggling it off and on",
         "localAILoading": "Local AI Chat Model is loading...",
         "localAIStopped": "Local AI stopped",
         "localAIRunning": "Local AI is running",
-        "localAIInitializing": "Local AI is initializing and may take a few minutes, depending on your device",
-        "failToLoadLocalAI": "Failed to start local AI",
-        "restartLocalAI": "Restart Local AI",
+        "localAINotReadyRetryLater": "Local AI is initializing, please retry later",
+        "localAIDisabled": "You are using local AI, but it is disabled. Please go to settings to enable it or try different model",
+        "localAIInitializing": "Local AI is loading. This may take a few seconds depending on your device",
+        "localAINotReadyTextFieldPrompt": "You can not edit while Local AI is loading",
+        "failToLoadLocalAI": "Failed to start local AI.",
+        "restartLocalAI": "Restart",
         "disableLocalAITitle": "Disable local AI",
         "disableLocalAIDescription": "Do you want to disable local AI?",
-        "localAIToggleTitle": "Toggle to enable or disable local AI",
+        "localAIToggleTitle": "AppFlowy Local AI (LAI)",
+        "localAIToggleSubTitle": "Run the most advanced local AI models within AppFlowy for ultimate privacy and security",
         "offlineAIInstruction1": "Follow the",
         "offlineAIInstruction2": "instruction",
         "offlineAIInstruction3": "to enable offline AI.",
@@ -868,10 +897,13 @@
         "activeOfflineAI": "Active",
         "downloadOfflineAI": "Download",
         "openModelDirectory": "Open folder",
-        "localAISetupInstruction1": "Follow these",
-        "localAISetupInstruction2": "instructions",
-        "localAISetupInstruction3": "to set up Ollama and AppFlowy Local AI. Skip if you've already set it up",
-        "startLocalAI": "It may take a few seconds to start the local AI"
+        "laiNotReady": "The Local AI app was not installed correctly.",
+        "ollamaNotReady": "The Ollama server is not ready.",
+        "pleaseFollowThese": "Please follow these",
+        "instructions": "instructions",
+        "installOllamaLai": "to set up Ollama and AppFlowy Local AI.",
+        "modelsMissing": "Cannot find the required models: ",
+        "downloadModel": "to download them."
       }
     },
     "planPage": {
@@ -1634,8 +1666,7 @@
     "url": {
       "launch": "Open link in browser",
       "copy": "Copy link to clipboard",
-      "textFieldHint": "Enter a URL",
-      "copiedNotification": "Copied to clipboard!"
+      "textFieldHint": "Enter a URL"
     },
     "relation": {
       "relatedDatabasePlaceLabel": "Related Database",
@@ -1995,7 +2026,28 @@
           "failedDuplicateFindView": "Failed to duplicate page - original view not found"
         }
       },
-      "cannotMoveToItsChildren": "Cannot move to its children"
+      "cannotMoveToItsChildren": "Cannot move to its children",
+      "linkPreview": {
+        "typeSelection": {
+          "pasteAs": "Paste as",
+          "mention": "Mention",
+          "URL": "URL",
+          "bookmark": "Bookmark",
+          "embed": "Embed"
+        },
+        "linkPreviewMenu": {
+          "toMetion": "Convert to Mention",
+          "toUrl": "Convert to URL",
+          "toEmbed": "Convert to Embed",
+          "toBookmark": "Convert to Bookmark",
+          "copyLink": "Copy Link",
+          "replace": "Replace",
+          "reload": "Reload",
+          "removeLink": "Remove Link",
+          "pasteHint": "Paste in https://...",
+          "unableToDisplay": "unable to display"
+        }
+      }
     },
     "outlineBlock": {
       "placeholder": "Table of Contents"
@@ -2104,19 +2156,27 @@
     },
     "toolbar": {
       "resetToDefaultFont": "Reset to default",
-      "textSize": "Text Size",
+      "textSize": "Text size",
+      "textColor": "Text color",
       "h1": "Heading 1",
       "h2": "Heading 2",
       "h3": "Heading 3",
-      "alignLeft": "Align Left",
-      "alignRight": "Align Right",
-      "alignCenter": "Align Center",
+      "alignLeft": "Align left",
+      "alignRight": "Align right",
+      "alignCenter": "Align center",
       "link": "Link",
-      "textAlign": "Text Align",
-      "moreOptions": "More Options",
+      "textAlign": "Text align",
+      "moreOptions": "More options",
       "font": "Font",
+      "inlineCode": "Inline code",
       "suggestions": "Suggestions",
-      "turnInto": "Turn Into"
+      "turnInto": "Turn into",
+      "equation": "Equation",
+      "insert": "Insert",
+      "linkInputHint": "Paste link or search pages",
+      "pageOrURL": "Page or URL",
+      "linkName": "Link Name",
+      "linkNameHint": "Input link name"
     },
     "errorBlock": {
       "theBlockIsNotSupported": "Unable to parse the block content",
@@ -2251,7 +2311,7 @@
   },
   "message": {
     "copy": {
-      "success": "Copied!",
+      "success": "Copied to clipboard",
       "fail": "Unable to copy"
     }
   },
@@ -2418,9 +2478,9 @@
     "link": "Link",
     "numberedList": "Numbered list",
     "numberedListShortForm": "Numbered",
-    "toggleHeading1ShortForm": "Toggle h1",
-    "toggleHeading2ShortForm": "Toggle h2",
-    "toggleHeading3ShortForm": "Toggle h3",
+    "toggleHeading1ShortForm": "Toggle H1",
+    "toggleHeading2ShortForm": "Toggle H2",
+    "toggleHeading3ShortForm": "Toggle H3",
     "quote": "Quote",
     "strikethrough": "Strikethrough",
     "text": "Text",
@@ -2481,6 +2541,7 @@
     "copyLink": "Copy link",
     "removeLink": "Remove link",
     "editLink": "Edit link",
+    "convertTo": "Convert to",
     "linkText": "Text",
     "linkTextHint": "Please enter text",
     "linkAddressHint": "Please enter URL",
@@ -2560,7 +2621,7 @@
   "noLogFiles": "There're no log files",
   "newSettings": {
     "myAccount": {
-      "title": "My account",
+      "title": "Account & App",
       "subtitle": "Customize your profile, manage account security, open AI keys, or login into your account.",
       "profileLabel": "Account name & Profile image",
       "profileNamePlaceholder": "Enter your name",
@@ -2579,14 +2640,41 @@
         "dialogTitle": "Delete account",
         "dialogContent1": "Are you sure you want to permanently delete your account?",
         "dialogContent2": "This action cannot be undone, and will remove access from all workspaces, erasing your entire account, including private workspaces, and removing you from all shared workspaces.",
-        "confirmHint1": "Please type \"DELETE MY ACCOUNT\" to confirm.",
+        "confirmHint1": "Please type \"@:newSettings.myAccount.deleteAccount.confirmHint3\" to confirm.",
         "confirmHint2": "I understand that this action is irreversible and will permanently delete my account and all associated data.",
         "confirmHint3": "DELETE MY ACCOUNT",
         "checkToConfirmError": "You must check the box to confirm deletion",
         "failedToGetCurrentUser": "Failed to get current user email",
-        "confirmTextValidationFailed": "Your confirmation text does not match \"DELETE MY ACCOUNT\"",
+        "confirmTextValidationFailed": "Your confirmation text does not match \"@:newSettings.myAccount.deleteAccount.confirmHint3\"",
         "deleteAccountSuccess": "Account deleted successfully"
-      }
+      },
+      "password": {
+        "title": "Password",
+        "changePassword": "Change password",
+        "currentPassword": "Current password",
+        "newPassword": "New password",
+        "confirmNewPassword": "Confirm new password",
+        "setupPassword": "Setup password",
+        "error": {
+          "newPasswordIsRequired": "New password is required",
+          "confirmPasswordIsRequired": "Confirm password is required",
+          "passwordsDoNotMatch": "Passwords do not match",
+          "newPasswordIsSameAsCurrent": "New password is same as current password"
+        },
+        "toast": {
+          "passwordUpdatedSuccessfully": "Password updated successfully",
+          "passwordUpdatedFailed": "Failed to update password",
+          "passwordSetupSuccessfully": "Password setup successfully",
+          "passwordSetupFailed": "Failed to setup password"
+        },
+        "hint": {
+          "enterYourCurrentPassword": "Enter your current password",
+          "enterYourNewPassword": "Enter your new password",
+          "confirmYourNewPassword": "Confirm your new password"
+        }
+      },
+      "myAccount": "My Account",
+      "myProfile": "My Profile"
     },
     "workplace": {
       "name": "Workplace",
@@ -2639,6 +2727,11 @@
   "commandPalette": {
     "placeholder": "Search or ask a question...",
     "bestMatches": "Best matches",
+    "aiOverview": "AI overview",
+    "aiOverviewSource": "Reference sources",
+    "aiOverviewMoreDetails": "More details",
+    "pagePreview": "Content preview",
+    "clickToOpenPage": "Click to open page",
     "recentHistory": "Recent history",
     "navigateHint": "to navigate",
     "loadingTooltip": "We are looking for results...",
@@ -2760,7 +2853,8 @@
     "continueWithApple": "Continue with Apple ",
     "moreOptions": "More options",
     "collapse": "Collapse",
-    "signInAgreement": "By clicking \"Continue\" above, you agreed to AppFlowy's",
+    "signInAgreement": "By clicking \"Continue\" above, you agreed to \nAppFlowy's ",
+    "signInLocalAgreement": "By clicking \"Get Started\" above, you agreed to \nAppFlowy's ",
     "and": "and",
     "termOfUse": "Terms",
     "privacyPolicy": "Privacy Policy",
@@ -3155,7 +3249,8 @@
     "editing": "Editing",
     "analyzing": "Analyzing",
     "continueWritingEmptyDocumentTitle": "Continue writing error",
-    "continueWritingEmptyDocumentDescription": "We are having trouble expanding on the content in your document. Write a small intro and we can take it from there!"
+    "continueWritingEmptyDocumentDescription": "We are having trouble expanding on the content in your document. Write a small intro and we can take it from there!",
+    "more": "More"
   },
   "autoUpdate": {
     "criticalUpdateTitle": "Update required to continue",

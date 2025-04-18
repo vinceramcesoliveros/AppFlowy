@@ -155,7 +155,8 @@
     "charCountLabel": "عدد الأحرف: ",
     "createdAtLabel": "تم إنشاؤه: ",
     "syncedAtLabel": "تم المزامنة: ",
-    "saveAsNewPage": "حفظ الرسائل في الصفحة"
+    "saveAsNewPage": "حفظ الرسائل في الصفحة",
+    "saveAsNewPageDisabled": "لا توجد رسائل متاحة"
   },
   "importPanel": {
     "textAndMarkdown": "نص و Markdown",
@@ -255,12 +256,19 @@
       "bulletWithImageDescription": "@:chat.changeFormat.bullet مع الصورة",
       "tableWithImageDescription": "@:chat.changeFormat.table مع الصورة"
     },
+    "switchModel": {
+      "label": "تبديل النموذج",
+      "localModel": "النموذج المحلي",
+      "cloudModel": "نموذج السحابة",
+      "autoModel": "آلي"
+    },
     "selectBanner": {
       "saveButton": "أضف إلى...",
       "selectMessages": "حدد الرسائل",
       "nSelected": "{} تم التحديد",
       "allSelected": "جميعها محددة"
-    }
+    },
+    "stopTooltip": "توقف عن التوليد"
   },
   "trash": {
     "text": "المهملات",
@@ -303,14 +311,16 @@
   "questionBubble": {
     "shortcuts": "الاختصارات",
     "whatsNew": "ما هو الجديد؟",
-    "help": "المساعدة والدعم",
+    "helpAndDocumentation": "المساعدة والتوثيق",
+    "getSupport": "احصل على الدعم",
     "markdown": "Markdown",
     "debug": {
       "name": "معلومات التصحيح",
       "success": "تم نسخ معلومات التصحيح إلى الحافظة!",
       "fail": "تعذر نسخ معلومات التصحيح إلى الحافظة"
     },
-    "feedback": "تعليق"
+    "feedback": "تعليق",
+    "help": "المساعدة والدعم"
   },
   "menuAppHeader": {
     "moreButtonToolTip": "إزالة وإعادة تسمية والمزيد...",
@@ -505,6 +515,8 @@
       "settings": "إعدادات",
       "members": "الأعضاء",
       "trash": "سلة المحذوفات",
+      "helpAndDocumentation": "المساعدة والتوثيق",
+      "getSupport": "احصل على الدعم",
       "helpAndSupport": "المساعدة والدعم"
     },
     "sites": {
@@ -856,12 +868,16 @@
         "localAILoading": "جاري تحميل نموذج الدردشة المحلية للذكاء الاصطناعي...",
         "localAIStopped": "تم إيقاف الذكاء الاصطناعي المحلي",
         "localAIRunning": "الذكاء الاصطناعي المحلي قيد التشغيل",
+        "localAINotReadyRetryLater": "جاري تهيئة الذكاء الاصطناعي المحلي، يرجى المحاولة مرة أخرى لاحقًا",
+        "localAIDisabled": "أنت تستخدم الذكاء الاصطناعي المحلي، ولكنه مُعطّل. يُرجى الانتقال إلى الإعدادات لتفعيله أو تجربة نموذج آخر.",
         "localAIInitializing": "يتم تهيئة الذكاء الاصطناعي المحلي وقد يستغرق الأمر بضع دقائق، حسب جهازك",
+        "localAINotReadyTextFieldPrompt": "لا يمكنك التحرير أثناء تحميل الذكاء الاصطناعي المحلي",
         "failToLoadLocalAI": "فشل في بدء تشغيل الذكاء الاصطناعي المحلي",
         "restartLocalAI": "إعادة تشغيل الذكاء الاصطناعي المحلي",
         "disableLocalAITitle": "تعطيل الذكاء الاصطناعي المحلي",
         "disableLocalAIDescription": "هل تريد تعطيل الذكاء الاصطناعي المحلي؟",
         "localAIToggleTitle": "التبديل لتفعيل أو تعطيل الذكاء الاصطناعي المحلي",
+        "localAIToggleSubTitle": "قم بتشغيل نماذج الذكاء الاصطناعي المحلية الأكثر تقدمًا داخل AppFlowy للحصول على أقصى درجات الخصوصية والأمان",
         "offlineAIInstruction1": "اتبع",
         "offlineAIInstruction2": "تعليمات",
         "offlineAIInstruction3": "لتفعيل الذكاء الاصطناعي دون اتصال بالإنترنت.",
@@ -871,9 +887,13 @@
         "activeOfflineAI": "نشط",
         "downloadOfflineAI": "التنزيل",
         "openModelDirectory": "افتح المجلد",
-        "localAISetupInstruction1": "اتبع هؤلاء",
-        "localAISetupInstruction2": "التعليمات",
-        "localAISetupInstruction3": "لإعداد Ollama وAppFlowy Local AI. تخطَّ هذه الخطوة إذا كنت قد قمت بإعدادها بالفعل",
+        "laiNotReady": "لم يتم تثبيت تطبيق الذكاء الاصطناعي المحلي بشكل صحيح.",
+        "ollamaNotReady": "خادم Ollama غير جاهز.",
+        "pleaseFollowThese": "اتبع هؤلاء",
+        "instructions": "التعليمات",
+        "installOllamaLai": "لإعداد Ollama وAppFlowy Local AI. تخطَّ هذه الخطوة إذا كنت قد قمت بإعدادها بالفعل",
+        "modelsMissing": "لم يتم العثور على النماذج المطلوبة.",
+        "downloadModel": "لتنزيلها.",
         "startLocalAI": "قد يستغرق الأمر بضع ثوانٍ لبدء تشغيل الذكاء الاصطناعي المحلي"
       }
     },
@@ -1656,8 +1676,7 @@
     "url": {
       "launch": "فتح في المتصفح",
       "copy": "إنسخ الرابط",
-      "textFieldHint": "أدخل عنوان URL",
-      "copiedNotification": "تمت نسخها إلى الحافظة!"
+      "textFieldHint": "أدخل عنوان URL"
     },
     "relation": {
       "relatedDatabasePlaceLabel": "قاعدة البيانات ذات الصلة",
@@ -2127,7 +2146,28 @@
       "morePages": "المزيد من الصفحات"
     },
     "toolbar": {
-      "resetToDefaultFont": "إعادة تعيين إلى الافتراضي"
+      "resetToDefaultFont": "إعادة تعيين إلى الافتراضي",
+      "textSize": "حجم النص",
+      "textColor": "لون النص",
+      "h1": "العنوان 1",
+      "h2": "العنوان 2",
+      "h3": "العنوان 3",
+      "alignLeft": "محاذاة إلى اليسار",
+      "alignRight": "محاذاة إلى اليمين",
+      "alignCenter": "محاذاة إلى الوسط",
+      "link": "وصلة",
+      "textAlign": "محاذاة النص",
+      "moreOptions": "المزيد من الخيارات",
+      "font": "الخط",
+      "inlineCode": "الكود المضمن",
+      "suggestions": "اقتراحات",
+      "turnInto": "تحول إلى",
+      "equation": "معادلة",
+      "insert": "إدراج",
+      "linkInputHint": "لصق الرابط أو البحث عن الصفحات",
+      "pageOrURL": "الصفحة أو عنوان URL",
+      "linkName": "اسم الرابط",
+      "linkNameHint": "اسم رابط الإدخال"
     },
     "errorBlock": {
       "theBlockIsNotSupported": "الإصدار الحالي لا يدعم هذا الحقل.",
@@ -2592,12 +2632,12 @@
         "dialogTitle": "حذف الحساب",
         "dialogContent1": "هل أنت متأكد أنك تريد حذف حسابك نهائياً؟",
         "dialogContent2": "لا يمكن التراجع عن هذا الإجراء، وسوف يؤدي إلى إزالة الوصول من جميع مساحات العمل، ومسح حسابك بالكامل، بما في ذلك مساحات العمل الخاصة، وإزالتك من جميع مساحات العمل المشتركة.",
-        "confirmHint1": "من فضلك اكتب \"حذف حسابي\" للتأكيد.",
+        "confirmHint1": "من فضلك اكتب \"@:newSettings.myAccount.deleteAccount.confirmHint3\" للتأكيد.",
         "confirmHint2": "أفهم أن هذا الإجراء لا رجعة فيه وسيؤدي إلى حذف حسابي وجميع البيانات المرتبطة به بشكل دائم.",
         "confirmHint3": "حذف حسابي",
         "checkToConfirmError": "يجب عليك تحديد المربع لتأكيد الحذف",
         "failedToGetCurrentUser": "فشل في الحصول على البريد الإلكتروني الحالي للمستخدم",
-        "confirmTextValidationFailed": "نص التأكيد الخاص بك لا يتطابق مع \"حذف حسابي\"",
+        "confirmTextValidationFailed": "نص التأكيد الخاص بك لا يتطابق مع \"@:newSettings.myAccount.deleteAccount.confirmHint3\"",
         "deleteAccountSuccess": "تم حذف الحساب بنجاح"
       }
     },
@@ -2774,6 +2814,7 @@
     "moreOptions": "المزيد من الخيارات",
     "collapse": "طي",
     "signInAgreement": "بالنقر فوق \"متابعة\" أعلاه، فإنك توافق على شروط استخدام AppFlowy",
+    "signInLocalAgreement": "من خلال النقر على \"البدء\" أعلاه، فإنك توافق على شروط وأحكام AppFlowy",
     "and": "و",
     "termOfUse": "شروط",
     "privacyPolicy": "سياسة الخصوصية",
@@ -3168,10 +3209,35 @@
     "editing": "تحرير",
     "analyzing": "تحليل",
     "continueWritingEmptyDocumentTitle": "استمر في كتابة الخطأ",
-    "continueWritingEmptyDocumentDescription": "نواجه مشكلة في توسيع نطاق المحتوى في مستندك. اكتب مقدمة قصيرة وسنتولى الأمر من هناك!"
+    "continueWritingEmptyDocumentDescription": "نواجه مشكلة في توسيع نطاق المحتوى في مستندك. اكتب مقدمة قصيرة وسنتولى الأمر من هناك!",
+    "more": "أكثر"
   },
   "autoUpdate": {
     "criticalUpdateTitle": "التحديث ضروري للمتابعة",
-    "criticalUpdateDescription": "لقد أجرينا تحسينات لتحسين تجربتك! يُرجى التحديث من {currentVersion} إلى {newVersion} لمواصلة استخدام التطبيق."
+    "criticalUpdateDescription": "لقد أجرينا تحسينات لتحسين تجربتك! يُرجى التحديث من {currentVersion} إلى {newVersion} لمواصلة استخدام التطبيق.",
+    "criticalUpdateButton": "تحديث",
+    "bannerUpdateTitle": "النسخة الجديدة متاحة!",
+    "bannerUpdateDescription": "احصل على أحدث الميزات والإصلاحات. انقر على \"تحديث\" للتثبيت الآن.",
+    "bannerUpdateButton": "تحديث",
+    "settingsUpdateTitle": "الإصدار الجديد ({newVersion}) متاح!",
+    "settingsUpdateDescription": "الإصدار الحالي: {currentVersion} (الإصدار الرسمي) → {newVersion}",
+    "settingsUpdateButton": "تحديث",
+    "settingsUpdateWhatsNew": "ما الجديد"
+  },
+  "lockPage": {
+    "lockPage": "مقفل",
+    "reLockPage": "إعادة القفل",
+    "lockTooltip": "تم قفل الصفحة لمنع التعديل غير المقصود. انقر لفتح القفل.",
+    "pageLockedToast": "الصفحة مقفلة. التعديل معطل حتى يفتحها أحد.",
+    "lockedOperationTooltip": "تم قفل الصفحة لمنع التعديل غير المقصود."
+  },
+  "suggestion": {
+    "accept": "يقبل",
+    "keep": "يحفظ",
+    "discard": "تجاهل",
+    "close": "يغلق",
+    "tryAgain": "حاول ثانية",
+    "rewrite": "إعادة كتابة",
+    "insertBelow": "أدخل أدناه"
   }
 }

@@ -32,6 +32,7 @@ import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'pages/setting_ai_view/local_settings_ai_view.dart';
 import 'widgets/setting_cloud.dart';
 
 @visibleForTesting
@@ -141,13 +142,17 @@ class SettingsDialog extends StatelessWidget {
       case SettingsPage.ai:
         if (user.authenticator == AuthenticatorPB.AppFlowyCloud) {
           return SettingsAIView(
-            key: ValueKey(user.hashCode),
+            key: ValueKey(workspaceId),
             userProfile: user,
             currentWorkspaceMemberRole: currentWorkspaceMemberRole,
             workspaceId: workspaceId,
           );
         } else {
-          return const AIFeatureOnlySupportedWhenUsingAppFlowyCloud();
+          return LocalSettingsAIView(
+            key: ValueKey(workspaceId),
+            userProfile: user,
+            workspaceId: workspaceId,
+          );
         }
       case SettingsPage.member:
         return WorkspaceMembersPage(
@@ -363,7 +368,6 @@ class _SelfHostSettingsState extends State<_SelfHostSettings> {
   }) async {
     if (cloudUrl.isEmpty || webUrl.isEmpty) {
       showToastNotification(
-        context,
         message: LocaleKeys.settings_menu_pleaseInputValidURL.tr(),
         type: ToastificationType.error,
       );
@@ -375,7 +379,6 @@ class _SelfHostSettingsState extends State<_SelfHostSettings> {
     if (mounted) {
       if (isValid) {
         showToastNotification(
-          context,
           message: LocaleKeys.settings_menu_changeUrl.tr(args: [cloudUrl]),
         );
 
@@ -387,7 +390,6 @@ class _SelfHostSettingsState extends State<_SelfHostSettings> {
         await runAppFlowy();
       } else {
         showToastNotification(
-          context,
           message: LocaleKeys.settings_menu_pleaseInputValidURL.tr(),
           type: ToastificationType.error,
         );
@@ -522,7 +524,6 @@ class _SupportSettings extends StatelessWidget {
                   await getIt<FlowyCacheManager>().clearAllCache();
                   if (context.mounted) {
                     showToastNotification(
-                      context,
                       message: LocaleKeys
                           .settings_manageDataPage_cache_dialog_successHint
                           .tr(),

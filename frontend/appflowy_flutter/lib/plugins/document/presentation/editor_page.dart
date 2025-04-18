@@ -20,17 +20,19 @@ import 'package:appflowy/workspace/application/view/view_lock_status_bloc.dart';
 import 'package:appflowy/workspace/application/view_info/view_info_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/af_focus_manager.dart';
 import 'package:appflowy_editor/appflowy_editor.dart' hide QuoteBlockKeys;
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:collection/collection.dart';
 import 'package:flowy_infra/theme_extension.dart';
-import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:universal_platform/universal_platform.dart';
 
+import 'editor_plugins/desktop_toolbar/desktop_floating_toolbar.dart';
 import 'editor_plugins/toolbar_item/custom_format_toolbar_items.dart';
 import 'editor_plugins/toolbar_item/custom_hightlight_color_toolbar_item.dart';
 import 'editor_plugins/toolbar_item/custom_link_toolbar_item.dart';
+import 'editor_plugins/toolbar_item/custom_placeholder_toolbar_item.dart';
 import 'editor_plugins/toolbar_item/custom_text_align_toolbar_item.dart';
 import 'editor_plugins/toolbar_item/custom_text_color_toolbar_item.dart';
 import 'editor_plugins/toolbar_item/more_option_toolbar_item.dart';
@@ -93,14 +95,22 @@ class _AppFlowyEditorPageState extends State<AppFlowyEditorPage>
 
   final List<ToolbarItem> toolbarItems = [
     improveWritingItem,
+    group0PaddingItem,
     aiWriterItem,
     customTextHeadingItem,
+    buildPaddingPlaceholderItem(
+      1,
+      isActive: onlyShowInSingleTextTypeSelectionAndExcludeTable,
+    ),
     ...customMarkdownFormatItems,
+    group1PaddingItem,
     customTextColorItem,
+    group1PaddingItem,
     customHighlightColorItem,
     customInlineCodeItem,
     suggestionsItem,
     customLinkItem,
+    group4PaddingItem,
     customTextAlignItem,
     moreOptionItem,
   ];
@@ -341,6 +351,7 @@ class _AppFlowyEditorPageState extends State<AppFlowyEditorPage>
     final isViewDeleted = context.read<DocumentBloc>().state.isDeleted;
     final isLocked =
         context.read<ViewLockStatusBloc?>()?.state.isLocked ?? false;
+
     final editor = Directionality(
       textDirection: textDirection,
       child: AppFlowyEditor(
@@ -384,7 +395,7 @@ class _AppFlowyEditorPageState extends State<AppFlowyEditorPage>
           },
           child: SizedBox(
             width: double.infinity,
-            height: UniversalPlatform.isDesktopOrWeb ? 300 : 400,
+            height: UniversalPlatform.isDesktopOrWeb ? 600 : 400,
           ),
         ),
         dropTargetStyle: AppFlowyDropTargetStyle(
@@ -419,30 +430,46 @@ class _AppFlowyEditorPageState extends State<AppFlowyEditorPage>
         ),
       );
     }
-
+    final appTheme = AppFlowyTheme.of(context);
     return Center(
-      child: FloatingToolbar(
-        floatingToolbarHeight: 40,
-        padding: EdgeInsets.symmetric(horizontal: 6),
-        style: FloatingToolbarStyle(
-          backgroundColor: Theme.of(context).cardColor,
-          toolbarElevation: 10,
+      child: BlocProvider.value(
+        value: context.read<DocumentBloc>(),
+        child: FloatingToolbar(
+          floatingToolbarHeight: 40,
+          padding: EdgeInsets.symmetric(horizontal: 6),
+          style: FloatingToolbarStyle(
+            backgroundColor: Theme.of(context).cardColor,
+            toolbarActiveColor: Color(0xffe0f8fd),
+          ),
+          items: toolbarItems,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(appTheme.borderRadius.l),
+            color: appTheme.surfaceColorScheme.primary,
+            boxShadow: appTheme.shadow.small,
+          ),
+          toolbarBuilder: (_, child, onDismiss, isMetricsChanged) =>
+              BlocProvider.value(
+            value: context.read<DocumentBloc>(),
+            child: DesktopFloatingToolbar(
+              editorState: editorState,
+              onDismiss: onDismiss,
+              enableAnimation: !isMetricsChanged,
+              child: child,
+            ),
+          ),
+          placeHolderBuilder: (_) => customPlaceholderItem,
+          editorState: editorState,
+          editorScrollController: editorScrollController,
+          textDirection: textDirection,
+          tooltipBuilder: (context, id, message, child) =>
+              widget.styleCustomizer.buildToolbarItemTooltip(
+            context,
+            id,
+            message,
+            child,
+          ),
+          child: editor,
         ),
-        items: toolbarItems,
-        decoration: context.getPopoverDecoration(
-          borderRadius: BorderRadius.circular(6),
-        ),
-        editorState: editorState,
-        editorScrollController: editorScrollController,
-        textDirection: textDirection,
-        tooltipBuilder: (context, id, message, child) =>
-            widget.styleCustomizer.buildToolbarItemTooltip(
-          context,
-          id,
-          message,
-          child,
-        ),
-        child: editor,
       ),
     );
   }

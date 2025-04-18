@@ -1,10 +1,14 @@
 use std::fmt::Display;
 
+#[allow(dead_code)]
 pub enum StreamMessage {
   MessageId(i64),
   IndexStart,
   IndexEnd,
   Text(String),
+  OnData(String),
+  OnError(String),
+  Metadata(String),
   Done,
   StartIndexFile { file_name: String },
   EndIndexFile { file_name: String },
@@ -20,7 +24,10 @@ impl Display for StreamMessage {
       StreamMessage::Text(text) => {
         write!(f, "data:{}", text)
       },
+      StreamMessage::OnData(message) => write!(f, "data:{message}"),
+      StreamMessage::OnError(message) => write!(f, "error:{message}"),
       StreamMessage::Done => write!(f, "done:"),
+      StreamMessage::Metadata(s) => write!(f, "metadata:{s}"),
       StreamMessage::StartIndexFile { file_name } => {
         write!(f, "start_index_file:{}", file_name)
       },

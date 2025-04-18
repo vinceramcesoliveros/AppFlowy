@@ -27,6 +27,7 @@ diesel::table! {
         author_id -> Text,
         reply_message_id -> Nullable<BigInt>,
         metadata -> Nullable<Text>,
+        is_sync -> Bool,
     }
 }
 
@@ -35,10 +36,9 @@ diesel::table! {
         chat_id -> Text,
         created_at -> BigInt,
         name -> Text,
-        local_files -> Text,
         metadata -> Text,
-        local_enabled -> Bool,
-        sync_to_cloud -> Bool,
+        rag_ids -> Nullable<Text>,
+        is_sync -> Bool,
     }
 }
 

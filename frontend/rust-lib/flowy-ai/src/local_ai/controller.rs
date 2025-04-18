@@ -1,33 +1,32 @@
 use crate::ai_manager::AIUserService;
-use crate::entities::{LackOfAIResourcePB, LocalAIPB, RunningStatePB};
+use crate::entities::{LocalAIPB, RunningStatePB};
 use crate::local_ai::resource::{LLMResourceService, LocalAIResourceController};
 use crate::notification::{
   chat_notification_builder, ChatNotification, APPFLOWY_AI_NOTIFICATION_KEY,
 };
+use af_plugin::manager::PluginManager;
 use anyhow::Error;
-use appflowy_plugin::manager::PluginManager;
-use flowy_ai_pub::cloud::{ChatCloudService, ChatMessageMetadata, ContextLoader, LocalAIConfig};
 use flowy_error::{FlowyError, FlowyResult};
 use flowy_sqlite::kv::KVStorePreferences;
 use futures::Sink;
 use lib_infra::async_trait::async_trait;
 use std::collections::HashMap;
 
-use crate::local_ai::watch::is_plugin_ready;
 use crate::stream_message::StreamMessage;
-use appflowy_local_ai::ollama_plugin::OllamaAIPlugin;
-use appflowy_plugin::core::plugin::RunningState;
+use af_local_ai::ollama_plugin::OllamaAIPlugin;
+use af_plugin::core::path::is_plugin_ready;
+use af_plugin::core::plugin::RunningState;
 use arc_swap::ArcSwapOption;
 use futures_util::SinkExt;
 use lib_infra::util::get_operating_system;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, Weak};
 use tokio::select;
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, info, instrument, warn};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LocalAISetting {
@@ -51,11 +50,9 @@ const LOCAL_AI_SETTING_KEY: &str = "appflowy_local_ai_setting:v1";
 pub struct LocalAIController {
   ai_plugin: Arc<OllamaAIPlugin>,
   resource: Arc<LocalAIResourceController>,
-  current_chat_id: ArcSwapOption<String>,
-  store_preferences: Arc<KVStorePreferences>,
+  current_chat_id: ArcSwapOption<Uuid>,
+  store_preferences: Weak<KVStorePreferences>,
   user_service: Arc<dyn AIUserService>,
-  #[allow(dead_code)]
-  cloud_service: Arc<dyn ChatCloudService>,
 }
 
 impl Deref for LocalAIController {
@@ -69,56 +66,83 @@ impl Deref for LocalAIController {
 impl LocalAIController {
   pub fn new(
     plugin_manager: Arc<PluginManager>,
-    store_preferences: Arc<KVStorePreferences>,
+    store_preferences: Weak<KVStorePreferences>,
     user_service: Arc<dyn AIUserService>,
-    cloud_service: Arc<dyn ChatCloudService>,
   ) -> Self {
     debug!(
       "[AI Plugin] init local ai controller, thread: {:?}",
       std::thread::current().id()
     );
+
+    // Create the core plugin and resource controller
     let local_ai = Arc::new(OllamaAIPlugin::new(plugin_manager));
     let res_impl = LLMResourceServiceImpl {
-      user_service: user_service.clone(),
-      cloud_service: cloud_service.clone(),
       store_preferences: store_preferences.clone(),
     };
-
     let local_ai_resource = Arc::new(LocalAIResourceController::new(
       user_service.clone(),
       res_impl,
     ));
-    let current_chat_id = ArcSwapOption::default();
+    // Subscribe to state changes
     let mut running_state_rx = local_ai.subscribe_running_state();
-    let cloned_llm_res = local_ai_resource.clone();
+
+    let cloned_llm_res = Arc::clone(&local_ai_resource);
     let cloned_store_preferences = store_preferences.clone();
-    let cloned_user_service = user_service.clone();
+    let cloned_local_ai = Arc::clone(&local_ai);
+    let cloned_user_service = Arc::clone(&user_service);
+
+    // Spawn a background task to listen for plugin state changes
     tokio::spawn(async move {
       while let Some(state) = running_state_rx.next().await {
-        if let Ok(workspace_id) = cloned_user_service.workspace_id() {
-          let key = local_ai_enabled_key(&workspace_id);
-          info!("[AI Plugin] state: {:?}", state);
+        // Skip if we can’t get workspace_id
+        let Ok(workspace_id) = cloned_user_service.workspace_id() else {
+          continue;
+        };
 
+        let key = local_ai_enabled_key(&workspace_id);
+        info!("[AI Plugin] state: {:?}", state);
+
+        // Read whether plugin is enabled from store; default to true
+        if let Some(store_preferences) = cloned_store_preferences.upgrade() {
+          let enabled = store_preferences.get_bool(&key).unwrap_or(true);
+          // Only check resource status if the plugin isn’t in "UnexpectedStop" and is enabled
+          let (plugin_downloaded, lack_of_resource) =
+            if !matches!(state, RunningState::UnexpectedStop { .. }) && enabled {
+              // Possibly check plugin readiness and resource concurrency in parallel,
+              // but here we do it sequentially for clarity.
+              let downloaded = is_plugin_ready();
+              let resource_lack = cloned_llm_res.get_lack_of_resource().await;
+              (downloaded, resource_lack)
+            } else {
+              (false, None)
+            };
+
+          // If plugin is running, retrieve version
+          let plugin_version = if matches!(state, RunningState::Running { .. }) {
+            match cloned_local_ai.plugin_info().await {
+              Ok(info) => Some(info.version),
+              Err(_) => None,
+            }
+          } else {
+            None
+          };
+
+          // Broadcast the new local AI state
           let new_state = RunningStatePB::from(state);
-          let enabled = cloned_store_preferences.get_bool(&key).unwrap_or(true);
-          let mut ready = false;
-          let mut lack_of_resource = None;
-          if enabled {
-            ready = is_plugin_ready();
-            lack_of_resource = cloned_llm_res.get_lack_of_resource().await;
-          }
-
           chat_notification_builder(
             APPFLOWY_AI_NOTIFICATION_KEY,
             ChatNotification::UpdateLocalAIState,
           )
           .payload(LocalAIPB {
             enabled,
-            is_plugin_executable_ready: ready,
+            plugin_downloaded,
             lack_of_resource,
             state: new_state,
+            plugin_version,
           })
           .send();
+        } else {
+          warn!("[AI Plugin] store preferences is dropped");
         }
       }
     });
@@ -126,13 +150,11 @@ impl LocalAIController {
     Self {
       ai_plugin: local_ai,
       resource: local_ai_resource,
-      current_chat_id,
+      current_chat_id: ArcSwapOption::default(),
       store_preferences,
       user_service,
-      cloud_service,
     }
   }
-
   #[instrument(level = "debug", skip_all)]
   pub async fn observe_plugin_resource(&self) {
     debug!(
@@ -176,9 +198,15 @@ impl LocalAIController {
 
   pub async fn reload(&self) -> FlowyResult<()> {
     let is_enabled = self.is_enabled();
-
     self.toggle_plugin(is_enabled).await?;
     Ok(())
+  }
+
+  fn upgrade_store_preferences(&self) -> FlowyResult<Arc<KVStorePreferences>> {
+    self
+      .store_preferences
+      .upgrade()
+      .ok_or_else(|| FlowyError::internal().with_context("Store preferences is dropped"))
   }
 
   /// Indicate whether the local AI plugin is running.
@@ -193,18 +221,32 @@ impl LocalAIController {
   /// AppFlowy store the value in local storage isolated by workspace id. Each workspace can have
   /// different settings.
   pub fn is_enabled(&self) -> bool {
+    if !get_operating_system().is_desktop() {
+      return false;
+    }
+
     if let Ok(key) = self
       .user_service
       .workspace_id()
       .map(|workspace_id| local_ai_enabled_key(&workspace_id))
     {
-      self.store_preferences.get_bool(&key).unwrap_or(false)
+      match self.upgrade_store_preferences() {
+        Ok(store) => store.get_bool(&key).unwrap_or(false),
+        Err(_) => false,
+      }
     } else {
       false
     }
   }
 
-  pub fn open_chat(&self, chat_id: &str) {
+  pub fn get_plugin_chat_model(&self) -> Option<String> {
+    if !self.is_enabled() {
+      return None;
+    }
+    Some(self.resource.get_llm_setting().chat_model_name)
+  }
+
+  pub fn open_chat(&self, chat_id: &Uuid) {
     if !self.is_enabled() {
       return;
     }
@@ -216,9 +258,7 @@ impl LocalAIController {
       self.close_chat(current_chat_id);
     }
 
-    self
-      .current_chat_id
-      .store(Some(Arc::new(chat_id.to_string())));
+    self.current_chat_id.store(Some(Arc::new(*chat_id)));
     let chat_id = chat_id.to_string();
     let weak_ctrl = Arc::downgrade(&self.ai_plugin);
     tokio::spawn(async move {
@@ -230,7 +270,7 @@ impl LocalAIController {
     });
   }
 
-  pub fn close_chat(&self, chat_id: &str) {
+  pub fn close_chat(&self, chat_id: &Uuid) {
     if !self.is_running() {
       return;
     }
@@ -256,8 +296,10 @@ impl LocalAIController {
       setting,
       std::thread::current().id()
     );
-    self.resource.set_llm_setting(setting).await?;
-    self.reload().await?;
+
+    if self.resource.set_llm_setting(setting).await.is_ok() {
+      self.reload().await?;
+    }
     Ok(())
   }
 
@@ -265,28 +307,56 @@ impl LocalAIController {
   pub async fn get_local_ai_state(&self) -> LocalAIPB {
     let start = std::time::Instant::now();
     let enabled = self.is_enabled();
-    let mut is_plugin_executable_ready = false;
-    let mut state = RunningState::ReadyToConnect;
-    let mut lack_of_resource = None;
-    if enabled {
-      is_plugin_executable_ready = is_plugin_ready();
-      state = self.ai_plugin.get_plugin_running_state();
-      lack_of_resource = self.resource.get_lack_of_resource().await;
+
+    // If not enabled, return immediately.
+    if !enabled {
+      debug!(
+        "[AI Plugin] get local ai state, elapsed: {:?}, thread: {:?}",
+        start.elapsed(),
+        std::thread::current().id()
+      );
+      return LocalAIPB {
+        enabled: false,
+        plugin_downloaded: false,
+        state: RunningStatePB::from(RunningState::ReadyToConnect),
+        lack_of_resource: None,
+        plugin_version: None,
+      };
     }
+
+    let plugin_downloaded = is_plugin_ready();
+    let state = self.ai_plugin.get_plugin_running_state();
+
+    // If the plugin is running, run both requests in parallel.
+    // Otherwise, only fetch the resource info.
+    let (plugin_version, lack_of_resource) = if matches!(state, RunningState::Running { .. }) {
+      // Launch both futures at once
+      let plugin_info_fut = self.ai_plugin.plugin_info();
+      let resource_fut = self.resource.get_lack_of_resource();
+
+      let (plugin_info_res, resource_res) = tokio::join!(plugin_info_fut, resource_fut);
+      let plugin_version = plugin_info_res.ok().map(|info| info.version);
+      (plugin_version, resource_res)
+    } else {
+      let resource_res = self.resource.get_lack_of_resource().await;
+      (None, resource_res)
+    };
+
     let elapsed = start.elapsed();
     debug!(
       "[AI Plugin] get local ai state, elapsed: {:?}, thread: {:?}",
       elapsed,
       std::thread::current().id()
     );
+
     LocalAIPB {
       enabled,
-      is_plugin_executable_ready,
+      plugin_downloaded,
       state: RunningStatePB::from(state),
       lack_of_resource,
+      plugin_version,
     }
   }
-
   #[instrument(level = "debug", skip_all)]
   pub async fn restart_plugin(&self) {
     if let Err(err) = initialize_ai_plugin(&self.ai_plugin, &self.resource, None).await {
@@ -301,126 +371,108 @@ impl LocalAIController {
       .map(|path| path.to_string_lossy().to_string())
   }
 
-  pub async fn get_plugin_download_link(&self) -> FlowyResult<String> {
-    self.resource.get_plugin_download_link().await
-  }
-
   pub async fn toggle_local_ai(&self) -> FlowyResult<bool> {
     let workspace_id = self.user_service.workspace_id()?;
     let key = local_ai_enabled_key(&workspace_id);
-    let enabled = !self.store_preferences.get_bool(&key).unwrap_or(true);
-    self.store_preferences.set_bool(&key, enabled)?;
+    let store_preferences = self.upgrade_store_preferences()?;
+    let enabled = !store_preferences.get_bool(&key).unwrap_or(true);
+    store_preferences.set_bool(&key, enabled)?;
     self.toggle_plugin(enabled).await?;
-
     Ok(enabled)
   }
 
-  pub async fn index_message_metadata(
-    &self,
-    chat_id: &str,
-    metadata_list: &[ChatMessageMetadata],
-    index_process_sink: &mut (impl Sink<String> + Unpin),
-  ) -> FlowyResult<()> {
-    if !self.is_enabled() {
-      return Ok(());
-    }
+  // #[instrument(level = "debug", skip_all)]
+  // pub async fn index_message_metadata(
+  //   &self,
+  //   chat_id: &Uuid,
+  //   metadata_list: &[ChatMessageMetadata],
+  //   index_process_sink: &mut (impl Sink<String> + Unpin),
+  // ) -> FlowyResult<()> {
+  //   if !self.is_enabled() {
+  //     info!("[AI Plugin] local ai is disabled, skip indexing");
+  //     return Ok(());
+  //   }
+  //
+  //   for metadata in metadata_list {
+  //     let mut file_metadata = HashMap::new();
+  //     file_metadata.insert("id".to_string(), json!(&metadata.id));
+  //     file_metadata.insert("name".to_string(), json!(&metadata.name));
+  //     file_metadata.insert("source".to_string(), json!(&metadata.source));
+  //
+  //     let file_path = Path::new(&metadata.data.content);
+  //     if !file_path.exists() {
+  //       return Err(
+  //         FlowyError::record_not_found().with_context(format!("File not found: {:?}", file_path)),
+  //       );
+  //     }
+  //     info!(
+  //       "[AI Plugin] embed file: {:?}, with metadata: {:?}",
+  //       file_path, file_metadata
+  //     );
+  //
+  //     match &metadata.data.content_type {
+  //       ContextLoader::Unknown => {
+  //         error!(
+  //           "[AI Plugin] unsupported content type: {:?}",
+  //           metadata.data.content_type
+  //         );
+  //       },
+  //       ContextLoader::Text | ContextLoader::Markdown | ContextLoader::PDF => {
+  //         self
+  //           .process_index_file(
+  //             chat_id,
+  //             file_path.to_path_buf(),
+  //             &file_metadata,
+  //             index_process_sink,
+  //           )
+  //           .await?;
+  //       },
+  //     }
+  //   }
+  //
+  //   Ok(())
+  // }
 
-    for metadata in metadata_list {
-      if let Err(err) = metadata.data.validate() {
-        error!(
-          "[AI Plugin] invalid metadata: {:?}, error: {:?}",
-          metadata, err
-        );
-        continue;
-      }
-
-      let mut index_metadata = HashMap::new();
-      index_metadata.insert("id".to_string(), json!(&metadata.id));
-      index_metadata.insert("name".to_string(), json!(&metadata.name));
-      index_metadata.insert("at_name".to_string(), json!(format!("@{}", &metadata.name)));
-      index_metadata.insert("source".to_string(), json!(&metadata.source));
-      match &metadata.data.content_type {
-        ContextLoader::Unknown => {
-          error!(
-            "[AI Plugin] unsupported content type: {:?}",
-            metadata.data.content_type
-          );
-        },
-        ContextLoader::Text | ContextLoader::Markdown => {
-          trace!("[AI Plugin]: index text: {}", metadata.data.content);
-          self
-            .process_index_file(
-              chat_id,
-              None,
-              Some(metadata.data.content.clone()),
-              metadata,
-              &index_metadata,
-              index_process_sink,
-            )
-            .await?;
-        },
-        ContextLoader::PDF => {
-          trace!("[AI Plugin]: index pdf file: {}", metadata.data.content);
-          let file_path = Path::new(&metadata.data.content);
-          if file_path.exists() {
-            self
-              .process_index_file(
-                chat_id,
-                Some(file_path.to_path_buf()),
-                None,
-                metadata,
-                &index_metadata,
-                index_process_sink,
-              )
-              .await?;
-          }
-        },
-      }
-    }
-
-    Ok(())
-  }
-
+  #[allow(dead_code)]
   async fn process_index_file(
     &self,
-    chat_id: &str,
-    file_path: Option<PathBuf>,
-    content: Option<String>,
-    metadata: &ChatMessageMetadata,
+    chat_id: &Uuid,
+    file_path: PathBuf,
     index_metadata: &HashMap<String, serde_json::Value>,
     index_process_sink: &mut (impl Sink<String> + Unpin),
   ) -> Result<(), FlowyError> {
+    let file_name = file_path
+      .file_name()
+      .unwrap_or_default()
+      .to_string_lossy()
+      .to_string();
+
     let _ = index_process_sink
       .send(
         StreamMessage::StartIndexFile {
-          file_name: metadata.name.clone(),
+          file_name: file_name.clone(),
         }
         .to_string(),
       )
       .await;
 
     let result = self
-      .embed_file(chat_id, file_path, content, Some(index_metadata.clone()))
+      .ai_plugin
+      .embed_file(
+        &chat_id.to_string(),
+        file_path,
+        Some(index_metadata.clone()),
+      )
       .await;
     match result {
       Ok(_) => {
         let _ = index_process_sink
-          .send(
-            StreamMessage::EndIndexFile {
-              file_name: metadata.name.clone(),
-            }
-            .to_string(),
-          )
+          .send(StreamMessage::EndIndexFile { file_name }.to_string())
           .await;
       },
       Err(err) => {
         let _ = index_process_sink
-          .send(
-            StreamMessage::IndexFileError {
-              file_name: metadata.name.clone(),
-            }
-            .to_string(),
-          )
+          .send(StreamMessage::IndexFileError { file_name }.to_string())
           .await;
         error!("[AI Plugin] failed to index file: {:?}", err);
       },
@@ -453,9 +505,10 @@ impl LocalAIController {
       )
       .payload(LocalAIPB {
         enabled,
-        is_plugin_executable_ready: true,
+        plugin_downloaded: true,
         state: RunningStatePB::Stopped,
         lack_of_resource: None,
+        plugin_version: None,
       })
       .send();
     }
@@ -469,7 +522,6 @@ async fn initialize_ai_plugin(
   llm_resource: &Arc<LocalAIResourceController>,
   ret: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> FlowyResult<()> {
-  let plugin = plugin.clone();
   let lack_of_resource = llm_resource.get_lack_of_resource().await;
 
   chat_notification_builder(
@@ -478,9 +530,10 @@ async fn initialize_ai_plugin(
   )
   .payload(LocalAIPB {
     enabled: true,
-    is_plugin_executable_ready: true,
+    plugin_downloaded: true,
     state: RunningStatePB::ReadyToRun,
     lack_of_resource: lack_of_resource.clone(),
+    plugin_version: None,
   })
   .send();
 
@@ -494,21 +547,20 @@ async fn initialize_ai_plugin(
       APPFLOWY_AI_NOTIFICATION_KEY,
       ChatNotification::LocalAIResourceUpdated,
     )
-    .payload(LackOfAIResourcePB {
-      resource_desc: lack_of_resource,
-    })
+    .payload(lack_of_resource)
     .send();
-
-    if let Err(err) = plugin.destroy_plugin().await {
-      error!(
-        "[AI Plugin] failed to destroy plugin when lack of resource: {:?}",
-        err
-      );
-    }
 
     return Ok(());
   }
 
+  if let Err(err) = plugin.destroy_plugin().await {
+    error!(
+      "[AI Plugin] failed to destroy plugin when lack of resource: {:?}",
+      err
+    );
+  }
+
+  let plugin = plugin.clone();
   let cloned_llm_res = llm_resource.clone();
   tokio::task::spawn_blocking(move || {
     futures::executor::block_on(async move {
@@ -540,36 +592,32 @@ async fn initialize_ai_plugin(
 }
 
 pub struct LLMResourceServiceImpl {
-  user_service: Arc<dyn AIUserService>,
-  cloud_service: Arc<dyn ChatCloudService>,
-  store_preferences: Arc<KVStorePreferences>,
+  store_preferences: Weak<KVStorePreferences>,
+}
+
+impl LLMResourceServiceImpl {
+  fn upgrade_store_preferences(&self) -> FlowyResult<Arc<KVStorePreferences>> {
+    self
+      .store_preferences
+      .upgrade()
+      .ok_or_else(|| FlowyError::internal().with_context("Store preferences is dropped"))
+  }
 }
 #[async_trait]
 impl LLMResourceService for LLMResourceServiceImpl {
-  async fn fetch_local_ai_config(&self) -> Result<LocalAIConfig, anyhow::Error> {
-    let workspace_id = self.user_service.workspace_id()?;
-    let config = self
-      .cloud_service
-      .get_local_ai_config(&workspace_id)
-      .await?;
-    Ok(config)
-  }
-
   fn store_setting(&self, setting: LocalAISetting) -> Result<(), Error> {
-    self
-      .store_preferences
-      .set_object(LOCAL_AI_SETTING_KEY, &setting)?;
+    let store_preferences = self.upgrade_store_preferences()?;
+    store_preferences.set_object(LOCAL_AI_SETTING_KEY, &setting)?;
     Ok(())
   }
 
   fn retrieve_setting(&self) -> Option<LocalAISetting> {
-    self
-      .store_preferences
-      .get_object::<LocalAISetting>(LOCAL_AI_SETTING_KEY)
+    let store_preferences = self.upgrade_store_preferences().ok()?;
+    store_preferences.get_object::<LocalAISetting>(LOCAL_AI_SETTING_KEY)
   }
 }
 
 const APPFLOWY_LOCAL_AI_ENABLED: &str = "appflowy_local_ai_enabled";
-fn local_ai_enabled_key(workspace_id: &str) -> String {
+fn local_ai_enabled_key(workspace_id: &Uuid) -> String {
   format!("{}:{}", APPFLOWY_LOCAL_AI_ENABLED, workspace_id)
 }

@@ -1,17 +1,16 @@
 use crate::ai_manager::AIUserService;
 use crate::local_ai::controller::LocalAISetting;
-use flowy_ai_pub::cloud::LocalAIConfig;
 use flowy_error::{ErrorCode, FlowyError, FlowyResult};
 use lib_infra::async_trait::async_trait;
 
 use crate::entities::LackOfAIResourcePB;
-use crate::local_ai::watch::{is_plugin_ready, ollama_plugin_path};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::local_ai::watch::{watch_offline_app, WatchContext};
 use crate::notification::{
   chat_notification_builder, ChatNotification, APPFLOWY_AI_NOTIFICATION_KEY,
 };
-use appflowy_local_ai::ollama_plugin::OllamaPluginConfig;
+use af_local_ai::ollama_plugin::OllamaPluginConfig;
+use af_plugin::core::path::{is_plugin_ready, ollama_plugin_path};
 use lib_infra::util::{get_operating_system, OperatingSystem};
 use reqwest::Client;
 use serde::Deserialize;
@@ -33,7 +32,6 @@ struct ModelEntry {
 #[async_trait]
 pub trait LLMResourceService: Send + Sync + 'static {
   /// Get local ai configuration from remote server
-  async fn fetch_local_ai_config(&self) -> Result<LocalAIConfig, anyhow::Error>;
   fn store_setting(&self, setting: LocalAISetting) -> Result<(), anyhow::Error>;
   fn retrieve_setting(&self) -> Option<LocalAISetting>;
 }
@@ -47,27 +45,18 @@ pub enum WatchDiskEvent {
   Remove,
 }
 
+#[derive(Debug, Clone)]
 pub enum PendingResource {
   PluginExecutableNotReady,
   OllamaServerNotReady,
   MissingModel(String),
 }
 
-impl PendingResource {
-  pub fn desc(self) -> String {
-    match self {
-      PendingResource::PluginExecutableNotReady => "The Local AI app was not installed correctly. Please follow the instructions to install the Local AI application".to_string(),
-      PendingResource::OllamaServerNotReady => "Ollama is not ready. Please follow the instructions to install Ollama".to_string(),
-      PendingResource::MissingModel(model) => format!("Cannot find the model: {}. Please use the ollama pull command to install the model", model),
-    }
-  }
-}
-
 pub struct LocalAIResourceController {
   user_service: Arc<dyn AIUserService>,
   resource_service: Arc<dyn LLMResourceService>,
   resource_notify: tokio::sync::broadcast::Sender<()>,
-  #[cfg(target_os = "macos")]
+  #[cfg(any(target_os = "macos", target_os = "linux"))]
   #[allow(dead_code)]
   app_disk_watch: Option<WatchContext>,
   app_state_sender: tokio::sync::broadcast::Sender<WatchDiskEvent>,
@@ -80,10 +69,10 @@ impl LocalAIResourceController {
   ) -> Self {
     let (resource_notify, _) = tokio::sync::broadcast::channel(1);
     let (app_state_sender, _) = tokio::sync::broadcast::channel(1);
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let mut offline_app_disk_watch: Option<WatchContext> = None;
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
       match watch_offline_app() {
         Ok((new_watcher, mut rx)) => {
@@ -106,7 +95,7 @@ impl LocalAIResourceController {
     Self {
       user_service,
       resource_service: Arc::new(resource_service),
-      #[cfg(target_os = "macos")]
+      #[cfg(any(target_os = "macos", target_os = "linux"))]
       app_disk_watch: offline_app_disk_watch,
       app_state_sender,
       resource_notify,
@@ -128,15 +117,10 @@ impl LocalAIResourceController {
       return false;
     }
 
-    match self.calculate_pending_resources().await {
-      Ok(res) => res.is_empty(),
-      Err(_) => false,
-    }
-  }
-
-  pub async fn get_plugin_download_link(&self) -> FlowyResult<String> {
-    let ai_config = self.get_local_ai_configuration().await?;
-    Ok(ai_config.plugin.url)
+    self
+      .calculate_pending_resources()
+      .await
+      .is_ok_and(|r| r.is_none())
   }
 
   /// Retrieves model information and updates the current model settings.
@@ -147,36 +131,37 @@ impl LocalAIResourceController {
   #[instrument(level = "info", skip_all, err)]
   pub async fn set_llm_setting(&self, setting: LocalAISetting) -> FlowyResult<()> {
     self.resource_service.store_setting(setting)?;
-    let mut resources = self.calculate_pending_resources().await?;
-    if let Some(resource) = resources.pop() {
+    if let Some(resource) = self.calculate_pending_resources().await? {
+      let resource = LackOfAIResourcePB::from(resource);
       chat_notification_builder(
         APPFLOWY_AI_NOTIFICATION_KEY,
         ChatNotification::LocalAIResourceUpdated,
       )
-      .payload(LackOfAIResourcePB {
-        resource_desc: resource.desc(),
-      })
+      .payload(resource.clone())
       .send();
+      return Err(FlowyError::local_ai().with_context(format!("{:?}", resource)));
     }
     Ok(())
   }
 
-  pub async fn get_lack_of_resource(&self) -> Option<String> {
-    let mut resources = self.calculate_pending_resources().await.ok()?;
-    resources.pop().map(|r| r.desc())
+  pub async fn get_lack_of_resource(&self) -> Option<LackOfAIResourcePB> {
+    self
+      .calculate_pending_resources()
+      .await
+      .ok()?
+      .map(Into::into)
   }
 
-  pub async fn calculate_pending_resources(&self) -> FlowyResult<Vec<PendingResource>> {
-    let mut resources = vec![];
+  pub async fn calculate_pending_resources(&self) -> FlowyResult<Option<PendingResource>> {
     let app_path = ollama_plugin_path();
     if !is_plugin_ready() {
       trace!("[LLM Resource] offline app not found: {:?}", app_path);
-      resources.push(PendingResource::PluginExecutableNotReady);
-      return Ok(resources);
+      return Ok(Some(PendingResource::PluginExecutableNotReady));
     }
 
     let setting = self.get_llm_setting();
     let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
+
     match client.get(&setting.ollama_server_url).send().await {
       Ok(resp) if resp.status().is_success() => {
         info!(
@@ -189,8 +174,7 @@ impl LocalAIResourceController {
           "[LLM Resource] Ollama server is not responding at {}",
           setting.ollama_server_url
         );
-        resources.push(PendingResource::OllamaServerNotReady);
-        return Ok(resources);
+        return Ok(Some(PendingResource::OllamaServerNotReady));
       },
     }
 
@@ -201,23 +185,22 @@ impl LocalAIResourceController {
 
     match client.get(&tags_url).send().await {
       Ok(resp) if resp.status().is_success() => {
-        let tags: TagsResponse = resp.json().await.map_err(|e| {
-          log::error!(
-            "[LLM Resource] Failed to parse /api/tags JSON response: {:?}",
-            e
-          );
-          e
+        let tags: TagsResponse = resp.json().await.inspect_err(|e| {
+          log::error!("[LLM Resource] Failed to parse /api/tags JSON response: {e:?}")
         })?;
-        // Check each required model is present in the response.
+        // Check if each of our required models exists in the list of available models
+        trace!("[LLM Resource] ollama available models: {:?}", tags.models);
         for required in &required_models {
-          if !tags.models.iter().any(|m| m.name.contains(required)) {
+          if !tags
+            .models
+            .iter()
+            .any(|m| m.name == *required || m.name == format!("{}:latest", required))
+          {
             log::trace!(
               "[LLM Resource] required model '{}' not found in API response",
               required
             );
-            resources.push(PendingResource::MissingModel(required.clone()));
-            // Optionally, you could continue checking all models rather than returning early.
-            return Ok(resources);
+            return Ok(Some(PendingResource::MissingModel(required.clone())));
           }
         }
       },
@@ -226,12 +209,11 @@ impl LocalAIResourceController {
           "[LLM Resource] Failed to fetch models from {} (GET /api/tags)",
           setting.ollama_server_url
         );
-        resources.push(PendingResource::OllamaServerNotReady);
-        return Ok(resources);
+        return Ok(Some(PendingResource::OllamaServerNotReady));
       },
     }
 
-    Ok(resources)
+    Ok(None)
   }
 
   #[instrument(level = "info", skip_all)]
@@ -258,11 +240,13 @@ impl LocalAIResourceController {
 
     let mut config = OllamaPluginConfig::new(
       bin_path,
-      "ollama_ai_plugin".to_string(),
+      "af_ollama_plugin".to_string(),
       llm_setting.chat_model_name.clone(),
       llm_setting.embedding_model_name.clone(),
       Some(llm_setting.ollama_server_url.clone()),
     )?;
+
+    //config = config.with_log_level("debug".to_string());
 
     if rag_enabled {
       let resource_dir = self.resource_dir()?;
@@ -278,19 +262,6 @@ impl LocalAIResourceController {
     }
     trace!("[AI Chat] config: {:?}", config);
     Ok(config)
-  }
-
-  /// Fetches the local AI configuration from the resource service.
-  async fn get_local_ai_configuration(&self) -> FlowyResult<LocalAIConfig> {
-    self
-      .resource_service
-      .fetch_local_ai_config()
-      .await
-      .map_err(|err| {
-        error!("[LLM Resource] Failed to fetch local ai config: {:?}", err);
-        FlowyError::local_ai()
-          .with_context("Can't retrieve model info. Please try again later".to_string())
-      })
   }
 
   pub(crate) fn user_model_folder(&self) -> FlowyResult<PathBuf> {

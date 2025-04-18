@@ -50,12 +50,11 @@ Node pageMentionNode(String viewId) {
       operations: [
         TextInsert(
           MentionBlockKeys.mentionChar,
-          attributes: {
-            MentionBlockKeys.mention: {
-              MentionBlockKeys.type: MentionType.page.name,
-              MentionBlockKeys.pageId: viewId,
-            },
-          },
+          attributes: MentionBlockKeys.buildMentionPageAttributes(
+            mentionType: MentionType.page,
+            pageId: viewId,
+            blockId: null,
+          ),
         ),
       ],
     ),
@@ -118,7 +117,7 @@ class _MentionPageBlockState extends State<MentionPageBlock> {
               view: view,
               content: state.blockContent,
               textStyle: widget.textStyle,
-              handleTap: () => _handleTap(
+              handleTap: () => handleMentionBlockTap(
                 context,
                 widget.editorState,
                 view,
@@ -138,7 +137,7 @@ class _MentionPageBlockState extends State<MentionPageBlock> {
               content: state.blockContent,
               textStyle: widget.textStyle,
               showTrashHint: state.isInTrash,
-              handleTap: () => _handleTap(
+              handleTap: () => handleMentionBlockTap(
                 context,
                 widget.editorState,
                 view,
@@ -221,7 +220,8 @@ class _MentionSubPageBlockState extends State<MentionSubPageBlock> {
               view: view,
               showTrashHint: state.isInTrash,
               textStyle: widget.textStyle,
-              handleTap: () => _handleTap(context, widget.editorState, view),
+              handleTap: () =>
+                  handleMentionBlockTap(context, widget.editorState, view),
               isChildPage: true,
               content: '',
               handleDoubleTap: () => _handleDoubleTap(
@@ -239,7 +239,8 @@ class _MentionSubPageBlockState extends State<MentionSubPageBlock> {
               content: null,
               textStyle: widget.textStyle,
               isChildPage: true,
-              handleTap: () => _handleTap(context, widget.editorState, view),
+              handleTap: () =>
+                  handleMentionBlockTap(context, widget.editorState, view),
             );
           }
         },
@@ -282,12 +283,11 @@ class _MentionSubPageBlockState extends State<MentionSubPageBlock> {
         widget.node,
         widget.index,
         MentionBlockKeys.mentionChar.length,
-        {
-          MentionBlockKeys.mention: {
-            MentionBlockKeys.type: MentionType.page.name,
-            MentionBlockKeys.pageId: widget.pageId,
-          },
-        },
+        MentionBlockKeys.buildMentionPageAttributes(
+          mentionType: MentionType.page,
+          pageId: widget.pageId,
+          blockId: null,
+        ),
       );
 
     widget.editorState.apply(
@@ -321,7 +321,7 @@ Path? _findNodePathByBlockId(EditorState editorState, String blockId) {
   return null;
 }
 
-Future<void> _handleTap(
+Future<void> handleMentionBlockTap(
   BuildContext context,
   EditorState editorState,
   ViewPB view, {
@@ -381,25 +381,24 @@ Future<void> _handleDoubleTap(
   }
 
   final currentViewId = context.read<DocumentBloc>().documentId;
-  final newViewId = await showPageSelectorSheet(
+  final newView = await showPageSelectorSheet(
     context,
     currentViewId: currentViewId,
     selectedViewId: viewId,
   );
 
-  if (newViewId != null) {
+  if (newView != null) {
     // Update this nodes pageId
     final transaction = editorState.transaction
       ..formatText(
         node,
         index,
         1,
-        {
-          MentionBlockKeys.mention: {
-            MentionBlockKeys.type: MentionType.page.name,
-            MentionBlockKeys.pageId: newViewId,
-          },
-        },
+        MentionBlockKeys.buildMentionPageAttributes(
+          mentionType: MentionType.page,
+          pageId: newView.id,
+          blockId: null,
+        ),
       );
 
     await editorState.apply(transaction, withUpdateSelection: false);

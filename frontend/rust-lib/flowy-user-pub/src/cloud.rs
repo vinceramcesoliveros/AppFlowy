@@ -4,6 +4,7 @@ use client_api::entity::billing_dto::SubscriptionPlanDetail;
 pub use client_api::entity::billing_dto::SubscriptionStatus;
 use client_api::entity::billing_dto::WorkspaceSubscriptionStatus;
 use client_api::entity::billing_dto::WorkspaceUsageAndLimit;
+use client_api::entity::GotrueTokenResponse;
 pub use client_api::entity::{AFWorkspaceSettings, AFWorkspaceSettingsChange};
 use collab_entity::{CollabObject, CollabType};
 use flowy_error::{internal_error, ErrorCode, FlowyError};
@@ -19,7 +20,7 @@ use tokio_stream::wrappers::WatchStream;
 use uuid::Uuid;
 
 use crate::entities::{
-  AuthResponse, Authenticator, Role, UpdateUserProfileParams, UserCredentials, UserProfile,
+  AuthResponse, AuthType, Role, UpdateUserProfileParams, UserCredentials, UserProfile,
   UserTokenState, UserWorkspace, WorkspaceInvitation, WorkspaceInvitationStatus, WorkspaceMember,
 };
 
@@ -83,13 +84,9 @@ pub trait UserCloudServiceProvider: Send + Sync {
   /// * `enable_sync`: A boolean indicating whether synchronization should be enabled or disabled.
   fn set_enable_sync(&self, uid: i64, enable_sync: bool);
 
-  /// Sets the authenticator when user sign in or sign up.
-  ///
-  /// # Arguments
-  /// * `authenticator`: An `Authenticator` object.
-  fn set_user_authenticator(&self, authenticator: &Authenticator);
+  fn set_server_auth_type(&self, auth_type: &AuthType);
 
-  fn get_user_authenticator(&self) -> Authenticator;
+  fn get_server_auth_type(&self) -> AuthType;
 
   /// Sets the network reachability
   ///
@@ -148,10 +145,16 @@ pub trait UserCloudService: Send + Sync + 'static {
     &self,
     email: &str,
     password: &str,
-  ) -> Result<UserProfile, FlowyError>;
+  ) -> Result<GotrueTokenResponse, FlowyError>;
 
   async fn sign_in_with_magic_link(&self, email: &str, redirect_to: &str)
     -> Result<(), FlowyError>;
+
+  async fn sign_in_with_passcode(
+    &self,
+    email: &str,
+    passcode: &str,
+  ) -> Result<GotrueTokenResponse, FlowyError>;
 
   /// When the user opens the OAuth URL, it redirects to the corresponding provider's OAuth web page.
   /// After the user is authenticated, the browser will open a deep link to the AppFlowy app (iOS, macOS, etc.),
@@ -171,7 +174,7 @@ pub trait UserCloudService: Send + Sync + 'static {
   /// return None if the user is not found
   async fn get_user_profile(&self, credential: UserCredentials) -> Result<UserProfile, FlowyError>;
 
-  async fn open_workspace(&self, workspace_id: &str) -> Result<UserWorkspace, FlowyError>;
+  async fn open_workspace(&self, workspace_id: &Uuid) -> Result<UserWorkspace, FlowyError>;
 
   /// Return the all the workspaces of the user
   async fn get_all_workspace(&self, uid: i64) -> Result<Vec<UserWorkspace>, FlowyError>;
@@ -183,18 +186,18 @@ pub trait UserCloudService: Send + Sync + 'static {
   // Updates the workspace name and icon
   async fn patch_workspace(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     new_workspace_name: Option<&str>,
     new_workspace_icon: Option<&str>,
   ) -> Result<(), FlowyError>;
 
   /// Deletes a workspace owned by the user.
-  async fn delete_workspace(&self, workspace_id: &str) -> Result<(), FlowyError>;
+  async fn delete_workspace(&self, workspace_id: &Uuid) -> Result<(), FlowyError>;
 
   async fn invite_workspace_member(
     &self,
     invitee_email: String,
-    workspace_id: String,
+    workspace_id: Uuid,
     role: Role,
   ) -> Result<(), FlowyError> {
     Ok(())
@@ -214,7 +217,7 @@ pub trait UserCloudService: Send + Sync + 'static {
   async fn remove_workspace_member(
     &self,
     user_email: String,
-    workspace_id: String,
+    workspace_id: Uuid,
   ) -> Result<(), FlowyError> {
     Ok(())
   }
@@ -222,7 +225,7 @@ pub trait UserCloudService: Send + Sync + 'static {
   async fn update_workspace_member(
     &self,
     user_email: String,
-    workspace_id: String,
+    workspace_id: Uuid,
     role: Role,
   ) -> Result<(), FlowyError> {
     Ok(())
@@ -230,14 +233,14 @@ pub trait UserCloudService: Send + Sync + 'static {
 
   async fn get_workspace_members(
     &self,
-    workspace_id: String,
+    workspace_id: Uuid,
   ) -> Result<Vec<WorkspaceMember>, FlowyError> {
     Ok(vec![])
   }
 
   async fn get_workspace_member(
     &self,
-    workspace_id: String,
+    workspace_id: Uuid,
     uid: i64,
   ) -> Result<WorkspaceMember, FlowyError> {
     Err(FlowyError::not_support())
@@ -246,8 +249,8 @@ pub trait UserCloudService: Send + Sync + 'static {
   async fn get_user_awareness_doc_state(
     &self,
     uid: i64,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<Vec<u8>, FlowyError>;
 
   fn receive_realtime_event(&self, _json: Value) {}
@@ -255,8 +258,6 @@ pub trait UserCloudService: Send + Sync + 'static {
   fn subscribe_user_update(&self) -> Option<UserUpdateReceiver> {
     None
   }
-
-  async fn reset_workspace(&self, collab_object: CollabObject) -> Result<(), FlowyError>;
 
   async fn create_collab_object(
     &self,
@@ -266,11 +267,11 @@ pub trait UserCloudService: Send + Sync + 'static {
 
   async fn batch_create_collab_object(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     objects: Vec<UserCollabParams>,
   ) -> Result<(), FlowyError>;
 
-  async fn leave_workspace(&self, workspace_id: &str) -> Result<(), FlowyError> {
+  async fn leave_workspace(&self, workspace_id: &Uuid) -> Result<(), FlowyError> {
     Ok(())
   }
 
@@ -286,7 +287,7 @@ pub trait UserCloudService: Send + Sync + 'static {
 
   async fn get_workspace_member_info(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: i64,
   ) -> Result<WorkspaceMember, FlowyError> {
     Err(FlowyError::not_support())
@@ -318,7 +319,7 @@ pub trait UserCloudService: Send + Sync + 'static {
 
   async fn get_workspace_plan(
     &self,
-    workspace_id: String,
+    workspace_id: Uuid,
   ) -> Result<Vec<SubscriptionPlan>, FlowyError> {
     Err(FlowyError::not_support())
   }

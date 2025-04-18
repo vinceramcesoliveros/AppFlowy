@@ -30,7 +30,7 @@ use flowy_folder_pub::entities::{
 };
 use flowy_sqlite::kv::KVStorePreferences;
 use flowy_user_pub::cloud::{UserCloudService, UserCollabParams};
-use flowy_user_pub::entities::{user_awareness_object_id, Authenticator};
+use flowy_user_pub::entities::{user_awareness_object_id, AuthType};
 use flowy_user_pub::session::Session;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -43,6 +43,8 @@ use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::sync::{Arc, Weak};
 use tracing::{error, event, info, instrument, warn};
+use uuid::Uuid;
+
 pub(crate) struct ImportedFolder {
   pub imported_session: Session,
   pub imported_collab_db: Arc<CollabKVDB>,
@@ -1172,8 +1174,8 @@ impl DerefMut for OldToNewIdMap {
 pub async fn upload_collab_objects_data(
   uid: i64,
   user_collab_db: Weak<CollabKVDB>,
-  workspace_id: &str,
-  user_authenticator: &Authenticator,
+  workspace_id: &Uuid,
+  user_authenticator: &AuthType,
   collab_data: ImportedCollabData,
   user_cloud_service: Arc<dyn UserCloudService>,
 ) -> Result<(), FlowyError> {
@@ -1248,7 +1250,7 @@ pub async fn upload_collab_objects_data(
         objects.push(UserCollabParams {
           object_id: oid,
           encoded_collab,
-          collab_type: collab_type.clone(),
+          collab_type,
         });
         size_counter += obj_size;
       }
@@ -1275,7 +1277,7 @@ pub async fn upload_collab_objects_data(
 
 async fn batch_create(
   uid: i64,
-  workspace_id: &str,
+  workspace_id: &Uuid,
   user_cloud_service: &Arc<dyn UserCloudService>,
   size_counter: &usize,
   objects: Vec<UserCollabParams>,

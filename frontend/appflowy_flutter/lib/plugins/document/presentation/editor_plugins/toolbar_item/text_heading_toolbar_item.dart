@@ -1,16 +1,18 @@
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/actions/block_action_option_cubit.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/plugins.dart';
 import 'package:appflowy/plugins/document/presentation/editor_style.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 
-const _kTextHeadingItemId = 'editor.text_heading';
+import 'toolbar_id_enum.dart';
 
 final ToolbarItem customTextHeadingItem = ToolbarItem(
-  id: _kTextHeadingItemId,
+  id: ToolbarId.textHeading.id,
   group: 1,
   isActive: onlyShowInSingleTextTypeSelectionAndExcludeTable,
   builder: (
@@ -57,7 +59,7 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
     return AppFlowyPopover(
       controller: popoverController,
       direction: PopoverDirection.bottomWithLeftAligned,
-      offset: const Offset(-8.0, 2.0),
+      offset: const Offset(0, 2.0),
       onOpen: () => keepEditorFocusNotifier.increase(),
       onClose: () {
         setState(() {
@@ -76,9 +78,10 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
   }
 
   Widget buildChild(BuildContext context) {
-    final iconColor = Theme.of(context).iconTheme.color;
+    final theme = AppFlowyTheme.of(context),
+        iconColor = theme.iconColorScheme.primary;
     final child = FlowyIconButton(
-      width: 52,
+      width: 48,
       height: 32,
       isSelected: isSelected,
       hoverColor: EditorStyleCustomizer.toolbarHoverColor(context),
@@ -90,9 +93,10 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
             size: Size.square(20),
             color: iconColor,
           ),
+          HSpace(4),
           FlowySvg(
             FlowySvgs.toolbar_arrow_down_m,
-            size: Size.square(20),
+            size: Size(12, 20),
             color: iconColor,
           ),
         ],
@@ -107,7 +111,7 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
 
     return widget.tooltipBuilder?.call(
           context,
-          _kTextHeadingItemId,
+          ToolbarId.textHeading.id,
           LocaleKeys.document_toolbar_textSize.tr(),
           child,
         ) ??
@@ -115,6 +119,7 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
   }
 
   Widget buildPopoverContent() {
+    final selectingCommand = getSelectingCommand();
     return MouseRegion(
       child: SeparatedColumn(
         mainAxisSize: MainAxisSize.min,
@@ -132,7 +137,11 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
                 fontWeight: FontWeight.w400,
                 figmaLineHeight: 20,
               ),
+              rightIcon: selectingCommand == command
+                  ? FlowySvg(FlowySvgs.toolbar_check_m)
+                  : null,
               onTap: () {
+                if (command == selectingCommand) return;
                 command.onExecute(widget.editorState);
                 popoverController.close();
               },
@@ -141,6 +150,27 @@ class _TextHeadingActionListState extends State<TextHeadingActionList> {
         }),
       ),
     );
+  }
+
+  TextHeadingCommand? getSelectingCommand() {
+    final editorState = widget.editorState;
+    final selection = editorState.selection;
+    if (selection == null || !selection.isSingle) {
+      return null;
+    }
+    final node = editorState.getNodeAtPath(selection.start.path);
+    if (node == null || node.delta == null) {
+      return null;
+    }
+    final nodeType = node.type;
+    if (nodeType == ParagraphBlockKeys.type) return TextHeadingCommand.text;
+    if (nodeType == HeadingBlockKeys.type) {
+      final level = node.attributes[HeadingBlockKeys.level] ?? 1;
+      if (level == 1) return TextHeadingCommand.h1;
+      if (level == 2) return TextHeadingCommand.h2;
+      if (level == 3) return TextHeadingCommand.h3;
+    }
+    return null;
   }
 }
 
@@ -167,21 +197,33 @@ enum TextHeadingCommand {
     }
   }
 
-  void onExecute(EditorState editorState) {
+  void onExecute(EditorState state) {
     switch (this) {
       case text:
-        formatNodeToText(editorState);
+        formatNodeToText(state);
         break;
       case h1:
-        onHeadingLevelChanged(editorState, 1);
+        _turnInto(state, 1);
         break;
       case h2:
-        onHeadingLevelChanged(editorState, 2);
+        _turnInto(state, 2);
         break;
       case h3:
-        onHeadingLevelChanged(editorState, 3);
+        _turnInto(state, 3);
         break;
     }
+  }
+
+  Future<void> _turnInto(EditorState state, int level) async {
+    final selection = state.selection!;
+    final node = state.getNodeAtPath(selection.start.path)!;
+    await BlockActionOptionCubit.turnIntoBlock(
+      HeadingBlockKeys.type,
+      node,
+      state,
+      level: level,
+      keepSelection: true,
+    );
   }
 }
 
@@ -202,112 +244,4 @@ void formatNodeToText(EditorState editorState) {
       },
     ),
   );
-}
-
-Future<void> onHeadingLevelChanged(
-  EditorState editorState,
-  int newLevel,
-) async {
-  final selection = editorState.selection!;
-  final node = editorState.getNodeAtPath(selection.start.path)!;
-  final delta = (node.delta ?? Delta()).toJson();
-  final level = node.attributes[HeadingBlockKeys.level] ?? 1;
-  final originLevel = level;
-  final type = newLevel == originLevel && node.type == HeadingBlockKeys.type
-      ? ParagraphBlockKeys.type
-      : HeadingBlockKeys.type;
-
-  if (type == HeadingBlockKeys.type) {
-    // from paragraph to heading
-    final newNode = node.copyWith(
-      type: type,
-      attributes: {
-        HeadingBlockKeys.level: newLevel,
-        blockComponentBackgroundColor:
-            node.attributes[blockComponentBackgroundColor],
-        blockComponentTextDirection:
-            node.attributes[blockComponentTextDirection],
-        blockComponentDelta: delta,
-      },
-    );
-    final children = node.children.map((child) => child.deepCopy());
-
-    final transaction = editorState.transaction;
-    transaction.insertNodes(
-      selection.start.path.next,
-      [newNode, ...children],
-    );
-    transaction.deleteNode(node);
-    await editorState.apply(transaction);
-  } else {
-    // from heading to paragraph
-    await editorState.formatNode(
-      selection,
-      (node) => node.copyWith(
-        type: type,
-        attributes: {
-          HeadingBlockKeys.level: newLevel,
-          blockComponentBackgroundColor:
-              node.attributes[blockComponentBackgroundColor],
-          blockComponentTextDirection:
-              node.attributes[blockComponentTextDirection],
-          blockComponentDelta: delta,
-        },
-      ),
-    );
-  }
-}
-
-Future<void> onToggleLevelChanged(
-  EditorState editorState,
-  int? newLevel,
-) async {
-  final selection = editorState.selection!;
-  final node = editorState.getNodeAtPath(selection.start.path)!;
-  final delta = (node.delta ?? Delta()).toJson();
-  final level = node.attributes[ToggleListBlockKeys.level];
-  final originLevel = level;
-
-  final type = newLevel == originLevel && node.type == ToggleListBlockKeys.type
-      ? ParagraphBlockKeys.type
-      : ToggleListBlockKeys.type;
-
-  if (type == ToggleListBlockKeys.type) {
-    // from paragraph to heading
-    final newNode = node.copyWith(
-      type: type,
-      attributes: {
-        if (newLevel != null) ToggleListBlockKeys.level: newLevel,
-        blockComponentBackgroundColor:
-            node.attributes[blockComponentBackgroundColor],
-        blockComponentTextDirection:
-            node.attributes[blockComponentTextDirection],
-        blockComponentDelta: delta,
-      },
-    );
-    final children = node.children.map((child) => child.deepCopy());
-
-    final transaction = editorState.transaction;
-    transaction.insertNodes(
-      selection.start.path.next,
-      [newNode, ...children],
-    );
-    transaction.deleteNode(node);
-    await editorState.apply(transaction);
-  } else {
-    // from heading to paragraph
-    await editorState.formatNode(
-      selection,
-      (node) => node.copyWith(
-        type: type,
-        attributes: {
-          blockComponentBackgroundColor:
-              node.attributes[blockComponentBackgroundColor],
-          blockComponentTextDirection:
-              node.attributes[blockComponentTextDirection],
-          blockComponentDelta: delta,
-        },
-      ),
-    );
-  }
 }

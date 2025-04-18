@@ -1,17 +1,20 @@
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/base/toolbar_extension.dart';
 import 'package:appflowy/plugins/document/presentation/editor_style.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 
-const _kTextAlignItemId = 'editor.text_align';
+import 'toolbar_id_enum.dart';
 
 final ToolbarItem customTextAlignItem = ToolbarItem(
-  id: _kTextAlignItemId,
+  id: ToolbarId.textAlign.id,
   group: 4,
-  isActive: onlyShowInSingleSelectionAndTextType,
+  isActive: (state) =>
+      !isNarrowWindow(state) && onlyShowInSingleSelectionAndTextType(state),
   builder: (
     context,
     editorState,
@@ -33,18 +36,29 @@ class TextAlignActionList extends StatefulWidget {
     required this.editorState,
     required this.highlightColor,
     this.tooltipBuilder,
+    this.child,
+    this.onSelect,
+    this.popoverController,
+    this.popoverDirection = PopoverDirection.bottomWithLeftAligned,
+    this.showOffset = const Offset(0, 2),
   });
 
   final EditorState editorState;
   final ToolbarTooltipBuilder? tooltipBuilder;
   final Color highlightColor;
+  final Widget? child;
+  final VoidCallback? onSelect;
+  final PopoverController? popoverController;
+  final PopoverDirection popoverDirection;
+  final Offset showOffset;
 
   @override
   State<TextAlignActionList> createState() => _TextAlignActionListState();
 }
 
 class _TextAlignActionListState extends State<TextAlignActionList> {
-  final popoverController = PopoverController();
+  late PopoverController popoverController =
+      widget.popoverController ?? PopoverController();
 
   bool isSelected = false;
 
@@ -62,8 +76,8 @@ class _TextAlignActionListState extends State<TextAlignActionList> {
   Widget build(BuildContext context) {
     return AppFlowyPopover(
       controller: popoverController,
-      direction: PopoverDirection.bottomWithLeftAligned,
-      offset: const Offset(-8.0, 2.0),
+      direction: widget.popoverDirection,
+      offset: widget.showOffset,
       onOpen: () => keepEditorFocusNotifier.increase(),
       onClose: () {
         setState(() {
@@ -72,7 +86,7 @@ class _TextAlignActionListState extends State<TextAlignActionList> {
         keepEditorFocusNotifier.decrease();
       },
       popupBuilder: (context) => buildPopoverContent(),
-      child: buildChild(context),
+      child: widget.child ?? buildChild(context),
     );
   }
 
@@ -82,9 +96,10 @@ class _TextAlignActionListState extends State<TextAlignActionList> {
   }
 
   Widget buildChild(BuildContext context) {
-    final iconColor = Theme.of(context).iconTheme.color;
+    final theme = AppFlowyTheme.of(context),
+        iconColor = theme.iconColorScheme.primary;
     final child = FlowyIconButton(
-      width: 52,
+      width: 48,
       height: 32,
       isSelected: isSelected,
       hoverColor: EditorStyleCustomizer.toolbarHoverColor(context),
@@ -96,9 +111,10 @@ class _TextAlignActionListState extends State<TextAlignActionList> {
             size: Size.square(20),
             color: iconColor,
           ),
+          HSpace(4),
           FlowySvg(
             FlowySvgs.toolbar_arrow_down_m,
-            size: Size.square(20),
+            size: Size(12, 20),
             color: iconColor,
           ),
         ],
@@ -113,7 +129,7 @@ class _TextAlignActionListState extends State<TextAlignActionList> {
 
     return widget.tooltipBuilder?.call(
           context,
-          _kTextAlignItemId,
+          ToolbarId.textAlign.id,
           LocaleKeys.document_toolbar_textAlign.tr(),
           child,
         ) ??
@@ -132,26 +148,23 @@ class _TextAlignActionListState extends State<TextAlignActionList> {
           final isHighlight = nodes.every(
             (n) => n.attributes[blockComponentAlign] == command.name,
           );
-          final color =
-              isHighlight ? highlightColor : Theme.of(context).iconTheme.color;
 
           return SizedBox(
             height: 36,
             child: FlowyButton(
               leftIconSize: const Size.square(20),
-              leftIcon: FlowySvg(
-                command.svg,
-                color: color,
-              ),
+              leftIcon: FlowySvg(command.svg),
               iconPadding: 12,
               text: FlowyText(
                 command.title,
                 fontWeight: FontWeight.w400,
                 figmaLineHeight: 20,
-                color: color,
               ),
+              rightIcon:
+                  isHighlight ? FlowySvg(FlowySvgs.toolbar_check_m) : null,
               onTap: () {
                 command.onAlignChanged(editorState);
+                widget.onSelect?.call();
                 popoverController.close();
               },
             ),
@@ -193,6 +206,10 @@ enum TextAlignCommand {
           blockComponentAlign: name,
         },
       ),
+      selectionExtraInfo: {
+        selectionExtraInfoDoNotAttachTextService: true,
+        selectionExtraInfoDisableFloatingToolbar: true,
+      },
     );
   }
 }

@@ -226,14 +226,14 @@
   "questionBubble": {
     "shortcuts": "Phím tắt",
     "whatsNew": "Có gì mới?",
-    "help": "Trợ giúp &amp; Hỗ trợ",
     "markdown": "Markdown",
     "debug": {
       "name": "Thông tin gỡ lỗi",
       "success": "Đã sao chép thông tin gỡ lỗi vào khay nhớ tạm!",
       "fail": "Không thể sao chép thông tin gỡ lỗi vào khay nhớ tạm"
     },
-    "feedback": "Nhận xét"
+    "feedback": "Nhận xét",
+    "help": "Trợ giúp &amp; Hỗ trợ"
   },
   "menuAppHeader": {
     "moreButtonToolTip": "Xóa, đổi tên và hơn thế nữa...",
@@ -1439,8 +1439,7 @@
     "url": {
       "launch": "Mở liên kết trong trình duyệt",
       "copy": "Sao chép URL",
-      "textFieldHint": "Nhập một URL",
-      "copiedNotification": "Đã sao chép vào bảng tạm!"
+      "textFieldHint": "Nhập một URL"
     },
     "relation": {
       "relatedDatabasePlaceLabel": "Cơ sở dữ liệu liên quan",
@@ -2270,12 +2269,12 @@
         "dialogTitle": "Xóa tài khoản",
         "dialogContent1": "Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản của mình không?",
         "dialogContent2": "Không thể hoàn tác hành động này và sẽ xóa quyền truy cập khỏi mọi không gian làm việc nhóm, xóa toàn bộ tài khoản của bạn, bao gồm cả không gian làm việc riêng tư và xóa bạn khỏi mọi không gian làm việc được chia sẻ.",
-        "confirmHint1": "Vui lòng nhập \"XÓA TÀI KHOẢN CỦA TÔI\" để xác nhận.",
+        "confirmHint1": "Vui lòng nhập \"@:newSettings.myAccount.deleteAccount.confirmHint3\" để xác nhận.",
         "confirmHint2": "Tôi hiểu rằng hành động này là không thể đảo ngược và sẽ xóa vĩnh viễn tài khoản của tôi cùng mọi dữ liệu liên quan.",
         "confirmHint3": "XÓA TÀI KHOẢN CỦA TÔI",
         "checkToConfirmError": "Bạn phải đánh dấu vào ô để xác nhận việc xóa",
         "failedToGetCurrentUser": "Không lấy được email người dùng hiện tại",
-        "confirmTextValidationFailed": "Văn bản xác nhận của bạn không khớp với \"XÓA TÀI KHOẢN CỦA TÔI\"",
+        "confirmTextValidationFailed": "Văn bản xác nhận của bạn không khớp với \"@:newSettings.myAccount.deleteAccount.confirmHint3\"",
         "deleteAccountSuccess": "Tài khoản đã được xóa thành công"
       }
     },

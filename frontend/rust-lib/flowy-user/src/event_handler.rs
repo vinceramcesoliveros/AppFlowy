@@ -5,9 +5,11 @@ use flowy_user_pub::entities::*;
 use lib_dispatch::prelude::*;
 use lib_infra::box_any::BoxAny;
 use serde_json::Value;
+use std::str::FromStr;
 use std::sync::Weak;
 use std::{convert::TryInto, sync::Arc};
 use tracing::{event, trace};
+use uuid::Uuid;
 
 use crate::entities::*;
 use crate::notification::{send_notification, UserNotification};
@@ -39,18 +41,20 @@ fn upgrade_store_preferences(
 pub async fn sign_in_with_email_password_handler(
   data: AFPluginData<SignInPayloadPB>,
   manager: AFPluginState<Weak<UserManager>>,
-) -> DataResult<UserProfilePB, FlowyError> {
+) -> DataResult<GotrueTokenResponsePB, FlowyError> {
   let manager = upgrade_manager(manager)?;
   let params: SignInParams = data.into_inner().try_into()?;
-  let auth_type = params.auth_type.clone();
 
-  let old_authenticator = manager.cloud_services.get_user_authenticator();
-  match manager.sign_in(params, auth_type).await {
-    Ok(profile) => data_result_ok(UserProfilePB::from(profile)),
+  let old_authenticator = manager.cloud_services.get_server_auth_type();
+  match manager
+    .sign_in_with_password(&params.email, &params.password)
+    .await
+  {
+    Ok(token) => data_result_ok(token.into()),
     Err(err) => {
       manager
         .cloud_services
-        .set_user_authenticator(&old_authenticator);
+        .set_server_auth_type(&old_authenticator);
       return Err(err);
     },
   }
@@ -72,16 +76,14 @@ pub async fn sign_up(
 ) -> DataResult<UserProfilePB, FlowyError> {
   let manager = upgrade_manager(manager)?;
   let params: SignUpParams = data.into_inner().try_into()?;
-  let authenticator = params.auth_type.clone();
+  let auth_type = params.auth_type;
 
-  let old_authenticator = manager.cloud_services.get_user_authenticator();
-  match manager.sign_up(authenticator, BoxAny::new(params)).await {
+  let prev_auth_type = manager.cloud_services.get_server_auth_type();
+  match manager.sign_up(auth_type, BoxAny::new(params)).await {
     Ok(profile) => data_result_ok(UserProfilePB::from(profile)),
     Err(err) => {
-      manager
-        .cloud_services
-        .set_user_authenticator(&old_authenticator);
-      return Err(err);
+      manager.cloud_services.set_server_auth_type(&prev_auth_type);
+      Err(err)
     },
   }
 }
@@ -115,7 +117,7 @@ pub async fn get_user_profile_handler(
 
   // When the user is logged in with a local account, the email field is a placeholder and should
   // not be exposed to the client. So we set the email field to an empty string.
-  if user_profile.authenticator == Authenticator::Local {
+  if user_profile.authenticator == AuthType::Local {
     user_profile.email = "".to_string();
   }
 
@@ -318,13 +320,26 @@ pub async fn sign_in_with_magic_link_handler(
 }
 
 #[tracing::instrument(level = "debug", skip(data, manager), err)]
+pub async fn sign_in_with_passcode_handler(
+  data: AFPluginData<PasscodeSignInPB>,
+  manager: AFPluginState<Weak<UserManager>>,
+) -> DataResult<GotrueTokenResponsePB, FlowyError> {
+  let manager = upgrade_manager(manager)?;
+  let params = data.into_inner();
+  let response = manager
+    .sign_in_with_passcode(&params.email, &params.passcode)
+    .await?;
+  data_result_ok(response.into())
+}
+
+#[tracing::instrument(level = "debug", skip(data, manager), err)]
 pub async fn oauth_sign_in_handler(
   data: AFPluginData<OauthSignInPB>,
   manager: AFPluginState<Weak<UserManager>>,
 ) -> DataResult<UserProfilePB, FlowyError> {
   let manager = upgrade_manager(manager)?;
   let params = data.into_inner();
-  let authenticator: Authenticator = params.authenticator.into();
+  let authenticator: AuthType = params.authenticator.into();
   let user_profile = manager
     .sign_up(authenticator, BoxAny::new(params.map))
     .await?;
@@ -338,7 +353,7 @@ pub async fn gen_sign_in_url_handler(
 ) -> DataResult<SignInUrlPB, FlowyError> {
   let manager = upgrade_manager(manager)?;
   let params = data.into_inner();
-  let authenticator: Authenticator = params.authenticator.into();
+  let authenticator: AuthType = params.authenticator.into();
   let sign_in_url = manager
     .generate_sign_in_url_with_email(&authenticator, &params.email)
     .await?;
@@ -515,7 +530,8 @@ pub async fn open_workspace_handler(
 ) -> Result<(), FlowyError> {
   let manager = upgrade_manager(manager)?;
   let params = data.try_into_inner()?;
-  manager.open_workspace(&params.workspace_id).await?;
+  let workspace_id = Uuid::from_str(&params.workspace_id)?;
+  manager.open_workspace(&workspace_id).await?;
   Ok(())
 }
 
@@ -597,24 +613,6 @@ pub async fn get_all_reminder_event_handler(
 }
 
 #[tracing::instrument(level = "debug", skip_all, err)]
-pub async fn reset_workspace_handler(
-  data: AFPluginData<ResetWorkspacePB>,
-  manager: AFPluginState<Weak<UserManager>>,
-) -> Result<(), FlowyError> {
-  let manager = upgrade_manager(manager)?;
-  let reset_pb = data.into_inner();
-  if reset_pb.workspace_id.is_empty() {
-    return Err(FlowyError::new(
-      ErrorCode::WorkspaceInitializeError,
-      "The workspace id is empty",
-    ));
-  }
-  let _session = manager.get_session()?;
-  manager.reset_workspace(reset_pb).await?;
-  Ok(())
-}
-
-#[tracing::instrument(level = "debug", skip_all, err)]
 pub async fn remove_reminder_event_handler(
   data: AFPluginData<ReminderIdentifierPB>,
   manager: AFPluginState<Weak<UserManager>>,
@@ -645,8 +643,9 @@ pub async fn delete_workspace_member_handler(
 ) -> Result<(), FlowyError> {
   let data = data.try_into_inner()?;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&data.workspace_id)?;
   manager
-    .remove_workspace_member(data.email, data.workspace_id)
+    .remove_workspace_member(data.email, workspace_id)
     .await?;
   Ok(())
 }
@@ -658,8 +657,9 @@ pub async fn get_workspace_members_handler(
 ) -> DataResult<RepeatedWorkspaceMemberPB, FlowyError> {
   let data = data.try_into_inner()?;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&data.workspace_id)?;
   let members = manager
-    .get_workspace_members(data.workspace_id)
+    .get_workspace_members(workspace_id)
     .await?
     .into_iter()
     .map(WorkspaceMemberPB::from)
@@ -674,8 +674,9 @@ pub async fn update_workspace_member_handler(
 ) -> Result<(), FlowyError> {
   let data = data.try_into_inner()?;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&data.workspace_id)?;
   manager
-    .update_workspace_member(data.email, data.workspace_id, data.role.into())
+    .update_workspace_member(data.email, workspace_id, data.role.into())
     .await?;
   Ok(())
 }
@@ -698,6 +699,7 @@ pub async fn delete_workspace_handler(
 ) -> Result<(), FlowyError> {
   let workspace_id = delete_workspace_param.try_into_inner()?.workspace_id;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&workspace_id)?;
   manager.delete_workspace(&workspace_id).await?;
   Ok(())
 }
@@ -709,8 +711,9 @@ pub async fn rename_workspace_handler(
 ) -> Result<(), FlowyError> {
   let params = rename_workspace_param.try_into_inner()?;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&params.workspace_id)?;
   manager
-    .patch_workspace(&params.workspace_id, Some(&params.new_name), None)
+    .patch_workspace(&workspace_id, Some(&params.new_name), None)
     .await?;
   Ok(())
 }
@@ -722,8 +725,9 @@ pub async fn change_workspace_icon_handler(
 ) -> Result<(), FlowyError> {
   let params = change_workspace_icon_param.try_into_inner()?;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&params.workspace_id)?;
   manager
-    .patch_workspace(&params.workspace_id, None, Some(&params.new_icon))
+    .patch_workspace(&workspace_id, None, Some(&params.new_icon))
     .await?;
   Ok(())
 }
@@ -735,8 +739,9 @@ pub async fn invite_workspace_member_handler(
 ) -> Result<(), FlowyError> {
   let param = param.try_into_inner()?;
   let manager = upgrade_manager(manager)?;
+  let workspace_id = Uuid::from_str(&param.workspace_id)?;
   manager
-    .invite_member_to_workspace(param.workspace_id, param.invitee_email, param.role.into())
+    .invite_member_to_workspace(workspace_id, param.invitee_email, param.role.into())
     .await?;
   Ok(())
 }
@@ -772,6 +777,7 @@ pub async fn leave_workspace_handler(
   manager: AFPluginState<Weak<UserManager>>,
 ) -> Result<(), FlowyError> {
   let workspace_id = param.into_inner().workspace_id;
+  let workspace_id = Uuid::from_str(&workspace_id)?;
   let manager = upgrade_manager(manager)?;
   manager.leave_workspace(&workspace_id).await?;
   Ok(())
@@ -870,7 +876,10 @@ pub async fn get_workspace_member_info(
   manager: AFPluginState<Weak<UserManager>>,
 ) -> DataResult<WorkspaceMemberPB, FlowyError> {
   let manager = upgrade_manager(manager)?;
-  let member = manager.get_workspace_member_info(param.uid).await?;
+  let workspace_id = manager.get_session()?.user_workspace.workspace_id()?;
+  let member = manager
+    .get_workspace_member_info(param.uid, &workspace_id)
+    .await?;
   data_result_ok(member.into())
 }
 
