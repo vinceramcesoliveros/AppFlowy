@@ -26,14 +26,15 @@ import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart'
 import 'package:flowy_infra_ui/style_widget/container.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:sentry/sentry.dart';
 import 'package:sized_context/sized_context.dart';
 import 'package:styled_widget/styled_widget.dart';
 
+import '../notifications/notification_panel.dart';
 import '../widgets/edit_panel/edit_panel.dart';
 import '../widgets/sidebar_resizer.dart';
 import 'home_layout.dart';
 import 'home_stack.dart';
+import 'menu/sidebar/slider_menu_hover_trigger.dart';
 
 class DesktopHomeScreen extends StatelessWidget {
   const DesktopHomeScreen({super.key});
@@ -52,8 +53,8 @@ class DesktopHomeScreen extends StatelessWidget {
           return _buildLoading();
         }
 
-        final workspaceSetting = snapshots.data?[0].fold(
-          (workspaceSettingPB) => workspaceSettingPB as WorkspaceSettingPB,
+        final workspaceLatest = snapshots.data?[0].fold(
+          (workspaceLatestPB) => workspaceLatestPB as WorkspaceLatestPB,
           (error) => null,
         );
 
@@ -64,17 +65,9 @@ class DesktopHomeScreen extends StatelessWidget {
 
         // In the unlikely case either of the above is null, eg.
         // when a workspace is already open this can happen.
-        if (workspaceSetting == null || userProfile == null) {
+        if (workspaceLatest == null || userProfile == null) {
           return const WorkspaceFailedScreen();
         }
-
-        Sentry.configureScope(
-          (scope) => scope.setUser(
-            SentryUser(
-              id: userProfile.id.toString(),
-            ),
-          ),
-        );
 
         return AFFocusManager(
           child: MultiBlocProvider(
@@ -86,11 +79,11 @@ class DesktopHomeScreen extends StatelessWidget {
               BlocProvider<TabsBloc>.value(value: getIt<TabsBloc>()),
               BlocProvider<HomeBloc>(
                 create: (_) =>
-                    HomeBloc(workspaceSetting)..add(const HomeEvent.initial()),
+                    HomeBloc(workspaceLatest)..add(const HomeEvent.initial()),
               ),
               BlocProvider<HomeSettingBloc>(
                 create: (_) => HomeSettingBloc(
-                  workspaceSetting,
+                  workspaceLatest,
                   context.read<AppearanceSettingsCubit>(),
                   context.widthPx,
                 )..add(const HomeSettingEvent.initial()),
@@ -137,7 +130,7 @@ class DesktopHomeScreen extends StatelessWidget {
                         child: _buildBody(
                           context,
                           userProfile,
-                          workspaceSetting,
+                          workspaceLatest,
                         ),
                       ),
                     ),
@@ -157,7 +150,7 @@ class DesktopHomeScreen extends StatelessWidget {
   Widget _buildBody(
     BuildContext context,
     UserProfilePB userProfile,
-    WorkspaceSettingPB workspaceSetting,
+    WorkspaceLatestPB workspaceSetting,
   ) {
     final layout = HomeLayout(context);
     final homeStack = HomeStack(
@@ -171,6 +164,8 @@ class DesktopHomeScreen extends StatelessWidget {
       userProfile: userProfile,
       workspaceSetting: workspaceSetting,
     );
+    final notificationPanel = NotificationPanel();
+    final sliderHoverTrigger = SliderMenuHoverTrigger();
 
     final homeMenuResizer =
         layout.showMenu ? const SidebarResizer() : const SizedBox.shrink();
@@ -183,6 +178,8 @@ class DesktopHomeScreen extends StatelessWidget {
       editPanel: editPanel,
       bubble: const QuestionBubble(),
       homeMenuResizer: homeMenuResizer,
+      notificationPanel: notificationPanel,
+      sliderHoverTrigger: sliderHoverTrigger,
     );
   }
 
@@ -190,7 +187,7 @@ class DesktopHomeScreen extends StatelessWidget {
     BuildContext context, {
     required HomeLayout layout,
     required UserProfilePB userProfile,
-    required WorkspaceSettingPB workspaceSetting,
+    required WorkspaceLatestPB workspaceSetting,
   }) {
     final homeMenu = HomeSideBar(
       userProfile: userProfile,
@@ -234,7 +231,10 @@ class DesktopHomeScreen extends StatelessWidget {
     required Widget editPanel,
     required Widget bubble,
     required Widget homeMenuResizer,
+    required Widget notificationPanel,
+    required Widget sliderHoverTrigger,
   }) {
+    final isSliderbarShowing = layout.showMenu;
     return Stack(
       children: [
         homeStack
@@ -263,10 +263,23 @@ class DesktopHomeScreen extends StatelessWidget {
               bottom: 0,
               width: layout.editPanelWidth,
             ),
+        notificationPanel
+            .animatedPanelX(
+              closeX: -layout.notificationPanelWidth,
+              isClosed: !layout.showNotificationPanel,
+              curve: Curves.easeOutQuad,
+              duration: layout.animDuration.inMilliseconds * 0.001,
+            )
+            .positioned(
+              left: isSliderbarShowing ? layout.menuWidth : 0,
+              top: isSliderbarShowing ? 0 : 52,
+              width: layout.notificationPanelWidth,
+              bottom: 0,
+            ),
         sidebar
             .animatedPanelX(
               closeX: -layout.menuWidth,
-              isClosed: !layout.showMenu,
+              isClosed: !isSliderbarShowing,
               curve: Curves.easeOutQuad,
               duration: layout.animDuration.inMilliseconds * 0.001,
             )

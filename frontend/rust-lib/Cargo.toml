@@ -29,7 +29,7 @@ members = [
   "flowy-search-pub",
   "flowy-ai",
   "flowy-ai-pub",
-  "flowy-storage-pub",
+  "flowy-storage-pub", "flowy-sqlite-vec",
 ]
 
 resolver = "2"
@@ -77,11 +77,13 @@ diesel = { version = "2.1.0", features = [
   "r2d2",
   "serde_json",
 ] }
+diesel_derives = { version = "2.1.0", features = ["sqlite", "r2d2"] }
 uuid = { version = "1.5.0", features = ["serde", "v4", "v5"] }
 serde_repr = "0.1"
 futures = "0.3.31"
 tokio = "1.38.0"
-tokio-stream = "0.1.14"
+tokio-stream = "0.1.17"
+ollama-rs = { version = "0.3.0" }
 async-trait = "0.1.81"
 chrono = { version = "0.4.31", default-features = false, features = ["clock"] }
 collab = { version = "0.2" }
@@ -101,14 +103,17 @@ derive_builder = "0.20.2"
 tantivy = { version = "0.24.0" }
 af-plugin = { version = "0.1" }
 af-local-ai = { version = "0.1" }
+num_enum = "0.7.3"
+flowy-sqlite-vec = { path = "flowy-sqlite-vec" }
 
 # Please using the following command to update the revision id
 # Current directory: frontend
 # Run the script.add_workspace_members:
 # scripts/tool/update_client_api_rev.sh  new_rev_id
 # ⚠️⚠️⚠️️
-client-api = { git = "https://github.com/AppFlowy-IO/AppFlowy-Cloud", rev = "6c6f1c5cc3ce2161c247f63f6132361da8dc0a32" }
-client-api-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Cloud", rev = "6c6f1c5cc3ce2161c247f63f6132361da8dc0a32" }
+client-api = { git = "https://github.com/AppFlowy-IO/AppFlowy-Cloud", rev = "667bb51f57f63ec02137053be71e77236f56faa7" }
+client-api-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Cloud", rev = "667bb51f57f63ec02137053be71e77236f56faa7" }
+workspace-template = { git = "https://github.com/AppFlowy-IO/AppFlowy-Cloud", rev = "667bb51f57f63ec02137053be71e77236f56faa7" }
 
 [profile.dev]
 opt-level = 0
@@ -143,14 +148,14 @@ rocksdb = { git = "https://github.com/rust-rocksdb/rust-rocksdb", rev = "1710120
 # To switch to the local path, run:
 # scripts/tool/update_collab_source.sh
 # ⚠️⚠️⚠️️
-collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-database = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-plugins = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-user = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
-collab-importer = { version = "0.1", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e717c2c6a15c42feda9e1ff1b122c7b0baf1821" }
+collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-database = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-plugins = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-user = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
+collab-importer = { version = "0.1", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b9bd12e83d3d9acacfacecf4ec12c7bae1df99fe" }
 
 # Working directory: frontend
 # To update the commit ID, run:
@@ -159,3 +164,5 @@ collab-importer = { version = "0.1", git = "https://github.com/AppFlowy-IO/AppFl
 af-local-ai = { version = "0.1", git = "https://github.com/AppFlowy-IO/AppFlowy-LocalAI", rev = "093d3f4916a7b924ac66b4f0a9d81cc5fcc72eaa" }
 af-plugin = { version = "0.1", git = "https://github.com/AppFlowy-IO/AppFlowy-LocalAI", rev = "093d3f4916a7b924ac66b4f0a9d81cc5fcc72eaa" }
 af-mcp = { version = "0.1", git = "https://github.com/AppFlowy-IO/AppFlowy-LocalAI", rev = "093d3f4916a7b924ac66b4f0a9d81cc5fcc72eaa" }
+
+langchain-rust = { version = "4.6.0", git = "https://github.com/appflowy/langchain-rust", branch = "bump_ollama_rs" }

@@ -1,4 +1,3 @@
-use crate::ai_manager::AIUserService;
 use crate::entities::{
   ChatMessageErrorPB, ChatMessageListPB, ChatMessagePB, PredefinedFormatPB,
   RepeatedRelatedQuestionPB, StreamMessageParams,
@@ -14,6 +13,7 @@ use flowy_ai_pub::persistence::{
   select_answer_where_match_reply_message_id, select_chat_messages, upsert_chat_messages,
   ChatMessageTable,
 };
+use flowy_ai_pub::user_service::AIUserService;
 use flowy_error::{ErrorCode, FlowyError, FlowyResult};
 use flowy_sqlite::DBConnection;
 use futures::{SinkExt, StreamExt};
@@ -152,7 +152,6 @@ impl Chat {
     self.stream_buffer.lock().await.clear();
 
     let format = format.map(Into::into).unwrap_or_default();
-
     let answer_stream_buffer = self.stream_buffer.clone();
     let uid = self.user_service.user_id()?;
     let workspace_id = self.user_service.workspace_id()?;
@@ -503,7 +502,7 @@ impl Chat {
   pub async fn get_related_question(
     &self,
     message_id: i64,
-    ai_model: Option<AIModel>,
+    ai_model: AIModel,
   ) -> Result<RepeatedRelatedQuestionPB, FlowyError> {
     let workspace_id = self.user_service.workspace_id()?;
     let resp = self

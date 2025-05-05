@@ -122,7 +122,8 @@ class CustomLinkPreviewWidget extends StatelessWidget {
       return MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: () => afLaunchUrlString(url),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => afLaunchUrlString(url, addingHttpSchemeWhenFailed: true),
           child: child,
         ),
       );
@@ -133,7 +134,8 @@ class CustomLinkPreviewWidget extends StatelessWidget {
       editorState: context.read<EditorState>(),
       extendActionWidgets: _buildExtendActionWidgets(context),
       child: GestureDetector(
-        onTap: () => afLaunchUrlString(url),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => afLaunchUrlString(url, addingHttpSchemeWhenFailed: true),
         child: child,
       ),
     );
@@ -161,25 +163,13 @@ class CustomLinkPreviewWidget extends StatelessWidget {
   }
 
   Widget buildImage(BuildContext context) {
+    if (imageUrl?.isEmpty ?? true) {
+      return SizedBox.shrink();
+    }
     final theme = AppFlowyTheme.of(context),
         fillScheme = theme.fillColorScheme,
         iconScheme = theme.iconColorScheme;
     final width = UniversalPlatform.isDesktopOrWeb ? 160.0 : 120.0;
-    Widget child;
-    if (imageUrl?.isNotEmpty ?? false) {
-      child = FlowyNetworkImage(
-        url: imageUrl!,
-        width: width,
-      );
-    } else {
-      child = Center(
-        child: FlowySvg(
-          FlowySvgs.toolbar_link_earth_m,
-          color: iconScheme.secondary,
-          size: Size.square(30),
-        ),
-      );
-    }
     return ClipRRect(
       borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(16.0),
@@ -188,7 +178,17 @@ class CustomLinkPreviewWidget extends StatelessWidget {
       child: Container(
         width: width,
         color: fillScheme.quaternary,
-        child: child,
+        child: FlowyNetworkImage(
+          url: imageUrl!,
+          width: width,
+          errorWidgetBuilder: (_, __, ___) => Center(
+            child: FlowySvg(
+              FlowySvgs.toolbar_link_earth_m,
+              color: iconScheme.secondary,
+              size: Size.square(30),
+            ),
+          ),
+        ),
       ),
     );
   }

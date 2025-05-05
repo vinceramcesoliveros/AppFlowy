@@ -10,8 +10,6 @@ use serde_json::Value;
 use serde_repr::*;
 use uuid::Uuid;
 
-pub const USER_METADATA_OPEN_AI_KEY: &str = "openai_key";
-pub const USER_METADATA_STABILITY_AI_KEY: &str = "stability_ai_key";
 pub const USER_METADATA_ICON_URL: &str = "icon_url";
 pub const USER_METADATA_UPDATE_AT: &str = "updated_at";
 
@@ -102,40 +100,6 @@ impl UserAuthResponse for AuthResponse {
   }
 }
 
-#[derive(Clone, Debug)]
-pub struct UserCredentials {
-  /// Currently, the token is only used when the [AuthType] is AppFlowyCloud
-  pub token: Option<String>,
-
-  /// The user id
-  pub uid: Option<i64>,
-
-  /// The user id
-  pub uuid: Option<String>,
-}
-
-impl UserCredentials {
-  pub fn from_uid(uid: i64) -> Self {
-    Self {
-      token: None,
-      uid: Some(uid),
-      uuid: None,
-    }
-  }
-
-  pub fn from_uuid(uuid: String) -> Self {
-    Self {
-      token: None,
-      uid: None,
-      uuid: Some(uuid),
-    }
-  }
-
-  pub fn new(token: Option<String>, uid: Option<i64>, uuid: Option<String>) -> Self {
-    Self { token, uid, uuid }
-  }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserWorkspace {
   pub id: String,
@@ -150,6 +114,12 @@ pub struct UserWorkspace {
   pub member_count: i64,
   #[serde(default)]
   pub role: Option<Role>,
+  #[serde(default = "default_workspace_type")]
+  pub workspace_type: WorkspaceType,
+}
+
+fn default_workspace_type() -> WorkspaceType {
+  WorkspaceType::Server
 }
 
 impl UserWorkspace {
@@ -158,34 +128,30 @@ impl UserWorkspace {
     Ok(id)
   }
 
-  pub fn new_local(workspace_id: &str, _uid: i64) -> Self {
+  pub fn new_local(workspace_id: String, name: &str) -> Self {
     Self {
-      id: workspace_id.to_string(),
-      name: "".to_string(),
+      id: workspace_id,
+      name: name.to_string(),
       created_at: Utc::now(),
       workspace_database_id: Uuid::new_v4().to_string(),
       icon: "".to_string(),
       member_count: 1,
-      role: None,
+      role: Some(Role::Owner),
+      workspace_type: WorkspaceType::Local,
     }
   }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct UserProfile {
-  #[serde(rename = "id")]
   pub uid: i64,
   pub email: String,
   pub name: String,
   pub token: String,
   pub icon_url: String,
-  pub openai_key: String,
-  pub stability_ai_key: String,
-  pub authenticator: AuthType,
-  // If the encryption_sign is not empty, which means the user has enabled the encryption.
-  pub encryption_type: EncryptionType,
+  pub auth_type: AuthType,
+  pub workspace_type: WorkspaceType,
   pub updated_at: i64,
-  pub ai_model: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq)]
@@ -233,37 +199,25 @@ where
 {
   fn from(params: (&T, &AuthType)) -> Self {
     let (value, auth_type) = params;
-    let (icon_url, openai_key, stability_ai_key) = {
-      value
-        .metadata()
-        .as_ref()
-        .map(|m| {
-          (
-            m.get(USER_METADATA_ICON_URL)
-              .map(|v| v.as_str().map(|s| s.to_string()).unwrap_or_default())
-              .unwrap_or_default(),
-            m.get(USER_METADATA_OPEN_AI_KEY)
-              .map(|v| v.as_str().map(|s| s.to_string()).unwrap_or_default())
-              .unwrap_or_default(),
-            m.get(USER_METADATA_STABILITY_AI_KEY)
-              .map(|v| v.as_str().map(|s| s.to_string()).unwrap_or_default())
-              .unwrap_or_default(),
-          )
-        })
-        .unwrap_or_default()
-    };
+    let icon_url = value
+      .metadata()
+      .as_ref()
+      .map(|m| {
+        m.get(USER_METADATA_ICON_URL)
+          .map(|v| v.as_str().map(|s| s.to_string()).unwrap_or_default())
+          .unwrap_or_default()
+      })
+      .unwrap_or_default();
+    let workspace_type = WorkspaceType::from(auth_type);
     Self {
       uid: value.user_id(),
       email: value.user_email().unwrap_or_default(),
       name: value.user_name().to_owned(),
       token: value.user_token().unwrap_or_default(),
       icon_url,
-      openai_key,
-      authenticator: *auth_type,
-      encryption_type: value.encryption_type(),
-      stability_ai_key,
+      auth_type: *auth_type,
+      workspace_type,
       updated_at: value.updated_at(),
-      ai_model: "".to_string(),
     }
   }
 }
@@ -275,11 +229,7 @@ pub struct UpdateUserProfileParams {
   pub email: Option<String>,
   pub password: Option<String>,
   pub icon_url: Option<String>,
-  pub openai_key: Option<String>,
-  pub stability_ai_key: Option<String>,
-  pub encryption_sign: Option<String>,
   pub token: Option<String>,
-  pub ai_model: Option<String>,
 }
 
 impl UpdateUserProfileParams {
@@ -314,39 +264,43 @@ impl UpdateUserProfileParams {
     self.icon_url = Some(icon_url.to_string());
     self
   }
+}
 
-  pub fn with_openai_key(mut self, openai_key: &str) -> Self {
-    self.openai_key = Some(openai_key.to_owned());
-    self
+#[derive(Debug, Clone, Copy, Hash, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
+#[repr(u8)]
+pub enum WorkspaceType {
+  Local = 0,
+  Server = 1,
+}
+
+impl Default for WorkspaceType {
+  fn default() -> Self {
+    Self::Local
   }
+}
 
-  pub fn with_stability_ai_key(mut self, stability_ai_key: &str) -> Self {
-    self.stability_ai_key = Some(stability_ai_key.to_owned());
-    self
+impl WorkspaceType {
+  pub fn is_local(&self) -> bool {
+    matches!(self, WorkspaceType::Local)
   }
+}
 
-  pub fn with_encryption_type(mut self, encryption_type: EncryptionType) -> Self {
-    let sign = match encryption_type {
-      EncryptionType::NoEncryption => "".to_string(),
-      EncryptionType::SelfEncryption(sign) => sign,
-    };
-    self.encryption_sign = Some(sign);
-    self
+impl From<i32> for WorkspaceType {
+  fn from(value: i32) -> Self {
+    match value {
+      0 => WorkspaceType::Local,
+      1 => WorkspaceType::Server,
+      _ => WorkspaceType::Server,
+    }
   }
+}
 
-  pub fn with_ai_model(mut self, ai_model: &str) -> Self {
-    self.ai_model = Some(ai_model.to_owned());
-    self
-  }
-
-  pub fn is_empty(&self) -> bool {
-    self.name.is_none()
-      && self.email.is_none()
-      && self.password.is_none()
-      && self.icon_url.is_none()
-      && self.openai_key.is_none()
-      && self.encryption_sign.is_none()
-      && self.stability_ai_key.is_none()
+impl From<&AuthType> for WorkspaceType {
+  fn from(value: &AuthType) -> Self {
+    match value {
+      AuthType::Local => WorkspaceType::Local,
+      AuthType::AppFlowyCloud => WorkspaceType::Server,
+    }
   }
 }
 
@@ -358,6 +312,15 @@ pub enum AuthType {
   /// Currently not supported. It will be supported in the future when the
   /// [AppFlowy-Server](https://github.com/AppFlowy-IO/AppFlowy-Server) ready.
   AppFlowyCloud = 1,
+}
+
+impl From<WorkspaceType> for AuthType {
+  fn from(value: WorkspaceType) -> Self {
+    match value {
+      WorkspaceType::Local => AuthType::Local,
+      WorkspaceType::Server => AuthType::AppFlowyCloud,
+    }
+  }
 }
 
 impl Display for AuthType {
@@ -411,7 +374,7 @@ pub enum UserTokenState {
 }
 
 // Workspace Role
-#[derive(Clone, Debug, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Role {
   Owner = 0,
@@ -455,6 +418,7 @@ pub struct WorkspaceMember {
   pub role: Role,
   pub name: String,
   pub avatar_url: Option<String>,
+  pub joined_at: Option<i64>,
 }
 
 /// represent the user awareness object id for the workspace.

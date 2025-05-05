@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:appflowy/ai/ai.dart';
 import 'package:appflowy/plugins/ai_chat/presentation/chat_message_selector_banner.dart';
 import 'package:appflowy/workspace/application/view/view_service.dart';
+import 'package:appflowy/workspace/presentation/home/home_stack.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
@@ -48,7 +49,7 @@ class AIChatPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // if (userProfile.authenticator != AuthenticatorPB.AppFlowyCloud) {
+    // if (userProfile.authenticator != AuthTypePB.Server) {
     //   return Center(
     //     child: FlowyText(
     //       LocaleKeys.chat_unsupportedCloudPrompt.tr(),
@@ -288,7 +289,7 @@ class _ChatContentPage extends StatelessWidget {
     return ChatMessage(
       message: message,
       animation: animation,
-      padding: const EdgeInsets.symmetric(vertical: 12.0),
+      padding: const EdgeInsets.symmetric(vertical: 18.0),
       receivedMessageScaleAnimationAlignment: Alignment.center,
       child: child,
     );
@@ -397,7 +398,7 @@ class _Input extends StatefulWidget {
 }
 
 class _InputState extends State<_Input> {
-  final textController = TextEditingController();
+  final textController = AiPromptInputTextEditingController();
 
   @override
   void dispose() {
@@ -413,7 +414,7 @@ class _InputState extends State<_Input> {
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 150),
           transitionBuilder: (child, animation) {
-            return SizeTransition(
+            return NonClippingSizeTransition(
               sizeFactor: animation,
               axisAlignment: -1,
               child: child,

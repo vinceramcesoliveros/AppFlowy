@@ -39,15 +39,26 @@ Future<bool> afLaunchUri(
     );
   }
 
-  // on Linux, add http scheme to the url if it is not present
-  if (UniversalPlatform.isLinux && !isURL(url, {'require_protocol': true})) {
+  // on Linux or Android or Windows, add http scheme to the url if it is not present
+  if ((UniversalPlatform.isLinux ||
+          UniversalPlatform.isAndroid ||
+          UniversalPlatform.isWindows) &&
+      !isURL(url, {'require_protocol': true})) {
     uri = Uri.parse('https://$url');
   }
 
-  // try to launch the uri directly
-  bool result = await launcher.canLaunchUrl(uri);
+  /// opening an incorrect link will cause a system error dialog to pop up on macOS
+  /// only use [canLaunchUrl] on macOS
+  /// and there is an known issue with url_launcher on Linux where it fails to launch
+  /// see https://github.com/flutter/flutter/issues/88463
+  bool result = true;
+  if (UniversalPlatform.isMacOS) {
+    result = await launcher.canLaunchUrl(uri);
+  }
+
   if (result) {
     try {
+      // try to launch the uri directly
       result = await launcher.launchUrl(
         uri,
         mode: mode,

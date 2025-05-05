@@ -1,14 +1,12 @@
-use crate::af_cloud::define::LoginUserService;
+use crate::af_cloud::define::LoggedUser;
 use chrono::{TimeZone, Utc};
 use client_api::entity::ai_dto::RepeatedRelatedQuestion;
-use client_api::entity::CompletionStream;
 use flowy_ai::local_ai::controller::LocalAIController;
-use flowy_ai::local_ai::stream_util::QuestionStream;
 use flowy_ai_pub::cloud::chat_dto::{ChatAuthor, ChatAuthorType};
 use flowy_ai_pub::cloud::{
-  AIModel, AppErrorCode, AppResponseError, ChatCloudService, ChatMessage, ChatMessageType,
-  ChatSettings, CompleteTextParams, MessageCursor, ModelList, RelatedQuestion, RepeatedChatMessage,
-  ResponseFormat, StreamAnswer, StreamComplete, UpdateChatParams,
+  AIModel, ChatCloudService, ChatMessage, ChatMessageType, ChatSettings, CompleteTextParams,
+  MessageCursor, ModelList, RelatedQuestion, RepeatedChatMessage, ResponseFormat, StreamAnswer,
+  StreamComplete, UpdateChatParams, DEFAULT_AI_MODEL_NAME,
 };
 use flowy_ai_pub::persistence::{
   deserialize_chat_metadata, deserialize_rag_ids, read_chat,
@@ -17,7 +15,6 @@ use flowy_ai_pub::persistence::{
   ChatMessageTable, ChatTable, ChatTableChangeset,
 };
 use flowy_error::{FlowyError, FlowyResult};
-use futures_util::{stream, StreamExt, TryStreamExt};
 use lib_infra::async_trait::async_trait;
 use lib_infra::util::timestamp;
 use serde_json::{json, Value};
@@ -28,14 +25,14 @@ use tracing::trace;
 use uuid::Uuid;
 
 pub struct LocalChatServiceImpl {
-  pub user: Arc<dyn LoginUserService>,
+  pub logged_user: Arc<dyn LoggedUser>,
   pub local_ai: Arc<LocalAIController>,
 }
 
 impl LocalChatServiceImpl {
   fn get_message_content(&self, message_id: i64) -> FlowyResult<String> {
-    let uid = self.user.user_id()?;
-    let db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let db = self.logged_user.get_sqlite_db(uid)?;
     let content = select_message_content(db, message_id)?.ok_or_else(|| {
       FlowyError::record_not_found().with_context(format!("Message not found: {}", message_id))
     })?;
@@ -43,8 +40,8 @@ impl LocalChatServiceImpl {
   }
 
   async fn upsert_message(&self, chat_id: &Uuid, message: ChatMessage) -> Result<(), FlowyError> {
-    let uid = self.user.user_id()?;
-    let conn = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let conn = self.logged_user.get_sqlite_db(uid)?;
     let row = ChatMessageTable::from_message(chat_id.to_string(), message, true);
     upsert_chat_messages(conn, &[row])?;
     Ok(())
@@ -62,8 +59,8 @@ impl ChatCloudService for LocalChatServiceImpl {
     _name: &str,
     metadata: Value,
   ) -> Result<(), FlowyError> {
-    let uid = self.user.user_id()?;
-    let db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let db = self.logged_user.get_sqlite_db(uid)?;
     let row = ChatTable::new(chat_id.to_string(), metadata, rag_ids, true);
     upsert_chat(db, &row)?;
     Ok(())
@@ -109,25 +106,12 @@ impl ChatCloudService for LocalChatServiceImpl {
     format: ResponseFormat,
     _ai_model: Option<AIModel>,
   ) -> Result<StreamAnswer, FlowyError> {
-    if self.local_ai.is_running() {
+    if self.local_ai.is_ready().await {
       let content = self.get_message_content(message_id)?;
-      match self
+      self
         .local_ai
-        .stream_question(
-          &chat_id.to_string(),
-          &content,
-          Some(json!(format)),
-          json!({}),
-        )
+        .stream_question(chat_id, &content, format)
         .await
-      {
-        Ok(stream) => Ok(QuestionStream::new(stream).boxed()),
-        Err(err) => Ok(
-          stream::once(async { Err(FlowyError::local_ai_unavailable().with_context(err)) }).boxed(),
-        ),
-      }
-    } else if self.local_ai.is_enabled() {
-      Err(FlowyError::local_ai_not_ready())
     } else {
       Err(FlowyError::local_ai_disabled())
     }
@@ -139,8 +123,8 @@ impl ChatCloudService for LocalChatServiceImpl {
     chat_id: &Uuid,
     question_id: i64,
   ) -> Result<ChatMessage, FlowyError> {
-    let uid = self.user.user_id()?;
-    let db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let db = self.logged_user.get_sqlite_db(uid)?;
 
     match select_answer_where_match_reply_message_id(db, &chat_id.to_string(), question_id)? {
       None => Err(FlowyError::record_not_found()),
@@ -156,8 +140,8 @@ impl ChatCloudService for LocalChatServiceImpl {
     limit: u64,
   ) -> Result<RepeatedChatMessage, FlowyError> {
     let chat_id = chat_id.to_string();
-    let uid = self.user.user_id()?;
-    let db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let db = self.logged_user.get_sqlite_db(uid)?;
     let result = select_chat_messages(db, &chat_id, limit, offset)?;
 
     let messages = result
@@ -180,8 +164,8 @@ impl ChatCloudService for LocalChatServiceImpl {
     answer_message_id: i64,
   ) -> Result<ChatMessage, FlowyError> {
     let chat_id = chat_id.to_string();
-    let uid = self.user.user_id()?;
-    let db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let db = self.logged_user.get_sqlite_db(uid)?;
     let row = select_answer_where_match_reply_message_id(db, &chat_id, answer_message_id)?
       .map(chat_message_from_row)
       .ok_or_else(FlowyError::record_not_found)?;
@@ -193,12 +177,12 @@ impl ChatCloudService for LocalChatServiceImpl {
     _workspace_id: &Uuid,
     chat_id: &Uuid,
     message_id: i64,
-    _ai_model: Option<AIModel>,
+    ai_model: AIModel,
   ) -> Result<RepeatedRelatedQuestion, FlowyError> {
-    if self.local_ai.is_running() {
+    if self.local_ai.is_ready().await {
       let questions = self
         .local_ai
-        .get_related_question(&chat_id.to_string())
+        .get_related_question(&ai_model.name, chat_id, message_id)
         .await
         .map_err(|err| FlowyError::local_ai().with_context(err))?;
       trace!("LocalAI related questions: {:?}", questions);
@@ -224,30 +208,10 @@ impl ChatCloudService for LocalChatServiceImpl {
     &self,
     _workspace_id: &Uuid,
     params: CompleteTextParams,
-    _ai_model: Option<AIModel>,
+    ai_model: AIModel,
   ) -> Result<StreamComplete, FlowyError> {
-    if self.local_ai.is_running() {
-      match self
-        .local_ai
-        .complete_text_v2(
-          &params.text,
-          params.completion_type.unwrap() as u8,
-          Some(json!(params.format)),
-          Some(json!(params.metadata)),
-        )
-        .await
-      {
-        Ok(stream) => Ok(
-          CompletionStream::new(
-            stream.map_err(|err| AppResponseError::new(AppErrorCode::Internal, err.to_string())),
-          )
-          .map_err(FlowyError::from)
-          .boxed(),
-        ),
-        Err(_) => Ok(stream::once(async { Err(FlowyError::local_ai_unavailable()) }).boxed()),
-      }
-    } else if self.local_ai.is_enabled() {
-      Err(FlowyError::local_ai_not_ready())
+    if self.local_ai.is_ready().await {
+      self.local_ai.complete_text(&ai_model.name, params).await
     } else {
       Err(FlowyError::local_ai_disabled())
     }
@@ -260,10 +224,10 @@ impl ChatCloudService for LocalChatServiceImpl {
     chat_id: &Uuid,
     metadata: Option<HashMap<String, Value>>,
   ) -> Result<(), FlowyError> {
-    if self.local_ai.is_running() {
+    if self.local_ai.is_ready().await {
       self
         .local_ai
-        .embed_file(&chat_id.to_string(), file_path.to_path_buf(), metadata)
+        .embed_file(chat_id, file_path.to_path_buf(), metadata)
         .await
         .map_err(|err| FlowyError::local_ai().with_context(err))?;
       Ok(())
@@ -278,8 +242,8 @@ impl ChatCloudService for LocalChatServiceImpl {
     chat_id: &Uuid,
   ) -> Result<ChatSettings, FlowyError> {
     let chat_id = chat_id.to_string();
-    let uid = self.user.user_id()?;
-    let db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let db = self.logged_user.get_sqlite_db(uid)?;
     let row = read_chat(db, &chat_id)?;
     let rag_ids = deserialize_rag_ids(&row.rag_ids);
     let metadata = deserialize_chat_metadata::<Value>(&row.metadata);
@@ -298,8 +262,8 @@ impl ChatCloudService for LocalChatServiceImpl {
     id: &Uuid,
     s: UpdateChatParams,
   ) -> Result<(), FlowyError> {
-    let uid = self.user.user_id()?;
-    let mut db = self.user.get_sqlite_db(uid)?;
+    let uid = self.logged_user.user_id()?;
+    let mut db = self.logged_user.get_sqlite_db(uid)?;
     let changeset = ChatTableChangeset {
       chat_id: id.to_string(),
       name: s.name,
@@ -313,11 +277,20 @@ impl ChatCloudService for LocalChatServiceImpl {
   }
 
   async fn get_available_models(&self, _workspace_id: &Uuid) -> Result<ModelList, FlowyError> {
-    Err(FlowyError::not_support().with_context("Chat is not supported in local server."))
+    Ok(ModelList { models: vec![] })
   }
 
   async fn get_workspace_default_model(&self, _workspace_id: &Uuid) -> Result<String, FlowyError> {
-    Err(FlowyError::not_support().with_context("Chat is not supported in local server."))
+    Ok(DEFAULT_AI_MODEL_NAME.to_string())
+  }
+
+  async fn set_workspace_default_model(
+    &self,
+    _workspace_id: &Uuid,
+    _model: &str,
+  ) -> Result<(), FlowyError> {
+    // do nothing
+    Ok(())
   }
 }
 
