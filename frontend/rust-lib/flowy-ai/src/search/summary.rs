@@ -1,8 +1,8 @@
 use flowy_error::FlowyError;
+use ollama_rs::Ollama;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::chat::{ChatMessage, MessageRole};
 use ollama_rs::generation::parameters::{FormatType, JsonStructure};
-use ollama_rs::Ollama;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -31,7 +31,6 @@ struct SummarySearchSchema {
 
 const SYSTEM_PROMPT: &str = r#"
 You are a strict, context-bound question answering assistant. Answer solely based on the context provided below. If the context lacks sufficient information for a confident response, reply with an empty answer.
-Do not reference or use any information beyond what is provided in the context.
 
 Output must include:
 - `answer`: a detailed, on-point answer to the user’s question.
@@ -104,7 +103,7 @@ pub async fn summarize_documents(
 
 #[cfg(test)]
 mod tests {
-  use crate::search::summary::{summarize_documents, LLMDocument};
+  use crate::search::summary::{LLMDocument, summarize_documents};
   use ollama_rs::Ollama;
 
   #[tokio::test]

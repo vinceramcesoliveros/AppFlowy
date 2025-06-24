@@ -1,7 +1,7 @@
 use crate::entities::LocalAIPB;
 use crate::local_ai::resource::{LLMResourceService, LocalAIResourceController};
 use crate::notification::{
-  chat_notification_builder, ChatNotification, APPFLOWY_AI_NOTIFICATION_KEY,
+  APPFLOWY_AI_NOTIFICATION_KEY, ChatNotification, chat_notification_builder,
 };
 use anyhow::Error;
 use flowy_error::{FlowyError, FlowyResult};
@@ -10,23 +10,23 @@ use futures::Sink;
 use lib_infra::async_trait::async_trait;
 use std::collections::HashMap;
 
-use crate::local_ai::chat::LLMChatController;
+use crate::local_ai::chat::{LLMChatController, LLMChatInfo};
 use crate::stream_message::StreamMessage;
 use arc_swap::ArcSwapOption;
 use flowy_ai_pub::cloud::AIModel;
 use flowy_ai_pub::persistence::{
-  select_local_ai_model, upsert_local_ai_model, LocalAIModelTable, ModelType,
+  LocalAIModelTable, ModelType, select_local_ai_model, upsert_local_ai_model,
 };
 use flowy_ai_pub::user_service::AIUserService;
 use futures_util::SinkExt;
 use lib_infra::util::get_operating_system;
-use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
 use ollama_rs::Ollama;
+use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -98,6 +98,13 @@ impl LocalAIController {
 
   pub async fn reload_ollama_client(&self, workspace_id: &str) {
     if !self.is_enabled_on_workspace(workspace_id) {
+      #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+      {
+        trace!("[Local AI] local ai is disabled, clear ollama client",);
+        let shared = crate::embeddings::context::EmbedContext::shared();
+        shared.set_ollama(None);
+        self.ollama.store(None);
+      }
       return;
     }
 
@@ -177,28 +184,46 @@ impl LocalAIController {
     Some(self.resource.get_llm_setting().chat_model_name)
   }
 
+  pub async fn set_chat_rag_ids(&self, chat_id: &Uuid, rag_ids: &[String]) {
+    if !self.is_enabled() {
+      return;
+    }
+
+    self.llm_controller.set_rag_ids(chat_id, rag_ids).await;
+  }
+
   pub async fn open_chat(
     &self,
     workspace_id: &Uuid,
     chat_id: &Uuid,
     model: &str,
+    rag_ids: Vec<String>,
+    summary: String,
   ) -> FlowyResult<()> {
     if !self.is_enabled() {
+      warn!("[chat] local ai is disabled, skip open chat");
       return Ok(());
     }
 
     // Only keep one chat open at a time. Since loading multiple models at the same time will cause
     // memory issues.
     if let Some(current_chat_id) = self.current_chat_id.load().as_ref() {
-      debug!("[Local AI] close previous chat: {}", current_chat_id);
-      self.close_chat(current_chat_id);
+      if current_chat_id.as_ref() != chat_id {
+        debug!("[Chat] close previous chat: {}", current_chat_id);
+        self.close_chat(current_chat_id);
+      }
     }
 
+    let info = LLMChatInfo {
+      chat_id: *chat_id,
+      workspace_id: *workspace_id,
+      model: model.to_string(),
+      rag_ids,
+      summary,
+    };
     self.current_chat_id.store(Some(Arc::new(*chat_id)));
-    self
-      .llm_controller
-      .open_chat(workspace_id, chat_id, model)
-      .await?;
+    trace!("[Chat] open chat: {}", chat_id);
+    self.llm_controller.open_chat(info).await?;
     Ok(())
   }
 

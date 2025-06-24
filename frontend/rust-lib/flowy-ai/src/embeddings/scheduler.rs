@@ -1,6 +1,6 @@
 use crate::embeddings::embedder::{Embedder, OllamaEmbedder};
 use crate::embeddings::indexer::IndexerProvider;
-use crate::search::summary::{summarize_documents, LLMDocument};
+use crate::search::summary::{LLMDocument, summarize_documents};
 use flowy_ai_pub::cloud::search_dto::{
   SearchContentType, SearchDocumentResponseItem, SearchResult, SearchSummaryResult, Summary,
 };
@@ -8,11 +8,11 @@ use flowy_ai_pub::entities::{EmbeddingRecord, UnindexedCollab, UnindexedData};
 use flowy_error::{ErrorCode, FlowyError, FlowyResult};
 use flowy_sqlite::internal::derives::multiconnection::chrono::Utc;
 use flowy_sqlite_vec::db::VectorSqliteDB;
-use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
 use ollama_rs::Ollama;
+use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
 use std::sync::{Arc, Weak};
 use tokio::select;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -110,7 +110,7 @@ impl EmbeddingScheduler {
       Some(query_embed) => {
         let result = self
           .vector_db
-          .search_with_score(&workspace_id.to_string(), vec![], query_embed, 10, 0.4)
+          .search_with_score(&workspace_id.to_string(), &[], query_embed, 10, 0.4)
           .await
           .map_err(|err| {
             error!("[Embedding] Failed to search: {}", err);
@@ -146,6 +146,7 @@ impl EmbeddingScheduler {
       return Ok(SearchSummaryResult { summaries: vec![] });
     }
 
+    trace!("[Search] generate local ai overview");
     let docs = search_results
       .into_iter()
       .map(|v| LLMDocument {
@@ -153,6 +154,7 @@ impl EmbeddingScheduler {
         object_id: v.object_id,
       })
       .collect::<Vec<_>>();
+
     let resp = summarize_documents(&self.ollama, question, model_name, docs)
       .await
       .map_err(|err| {
@@ -190,19 +192,20 @@ pub async fn spawn_write_embeddings(
   mut stop_rx: broadcast::Receiver<()>,
 ) {
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
+  info!("[Embedding] spawn embedding writer");
 
   loop {
     select! {
       // Shutdown signal arrives
       _ = stop_rx.recv() => {
-          info!("Received stop signal; shutting down embedding writer");
+          info!("[Embedding] Received stop signal; shutting down embedding writer");
           break;
       }
       // Next batch from the input channel
       n = rx.recv_many(&mut buf, EMBEDDING_RECORD_BUFFER_SIZE) => {
         // channel closed
         if n == 0 {
-          info!("Input channel closed; stopping write embeddings");
+          info!("[Embedding] Input channel closed; stopping write embeddings");
           break;
         }
 
@@ -210,7 +213,7 @@ pub async fn spawn_write_embeddings(
         let scheduler = match scheduler.upgrade() {
           Some(db) => db,
           None => {
-              error!("EmbeddingScheduler dropped; stopping write embeddings");
+              error!("[Embedding] EmbeddingScheduler dropped; stopping write embeddings");
               break;
           }
         };
@@ -241,10 +244,11 @@ async fn spawn_generate_embeddings(
   mut stop_rx: broadcast::Receiver<()>,
 ) {
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
+  info!("[Embedding] spawn embedding generator");
   loop {
     select! {
       _ = stop_rx.recv() => {
-        info!("Received stop signal; shutting down embedding writer");
+        info!("[Embedding] Received stop signal; shutting down embedding writer");
         break;
       }
       n = rx.recv_many(&mut buf, EMBEDDING_RECORD_BUFFER_SIZE) => {
@@ -300,7 +304,7 @@ async fn spawn_generate_embeddings(
 
                     if chunks.iter().all(|c| c.content.is_none()) {
                       trace!(
-                        "[Embedding] skip generating embeddings for collab: {}",
+                        "[Embedding] content doesn't change, skip generating embeddings for collab: {}",
                         record.object_id
                       );
                       continue;

@@ -1,4 +1,5 @@
 use crate::cloud::ai_dto::AvailableModel;
+pub use client_api::entity::QuestionStreamValue;
 pub use client_api::entity::ai_dto::{
   AppFlowyOfflineAI, CompleteTextParams, CompletionMessage, CompletionMetadata, CompletionType,
   CreateChatContext, CustomPrompt, LLMModel, LocalAIConfig, ModelInfo, ModelList, OutputContent,
@@ -9,7 +10,6 @@ pub use client_api::entity::chat_dto::{
   ChatMessage, ChatMessageType, ChatRAGData, ChatSettings, ContextLoader, MessageCursor,
   RepeatedChatMessage, UpdateChatParams,
 };
-pub use client_api::entity::QuestionStreamValue;
 pub use client_api::entity::*;
 pub use client_api::error::{AppResponseError, ErrorCode as AppErrorCode};
 use flowy_error::FlowyError;
@@ -123,7 +123,7 @@ pub trait ChatCloudService: Send + Sync + 'static {
     chat_id: &Uuid,
     question_id: i64,
     format: ResponseFormat,
-    ai_model: Option<AIModel>,
+    ai_model: AIModel,
   ) -> Result<StreamAnswer, FlowyError>;
 
   async fn get_answer(
@@ -185,6 +185,7 @@ pub trait ChatCloudService: Send + Sync + 'static {
   ) -> Result<(), FlowyError>;
 
   async fn get_available_models(&self, workspace_id: &Uuid) -> Result<ModelList, FlowyError>;
+
   async fn get_workspace_default_model(&self, workspace_id: &Uuid) -> Result<String, FlowyError>;
   async fn set_workspace_default_model(
     &self,

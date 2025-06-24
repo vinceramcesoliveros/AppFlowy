@@ -1,6 +1,5 @@
 use crate::local_ai::controller::LocalAISetting;
 use crate::local_ai::resource::PendingResource;
-use af_plugin::core::plugin::RunningState;
 use flowy_ai_pub::cloud::{
   AIModel, ChatMessage, ChatMessageType, CompletionMessage, LLMModel, OutputContent, OutputLayout,
   RelatedQuestion, RepeatedChatMessage, RepeatedRelatedQuestion, ResponseFormat,
@@ -300,6 +299,8 @@ pub struct ChatMessagePB {
 
   #[pb(index = 7, one_of)]
   pub metadata: Option<String>,
+  // #[pb(index = 8)]
+  // pub should_fetch_related_question: bool,
 }
 
 #[derive(Debug, Clone, Default, ProtoBuf)]
@@ -568,19 +569,6 @@ pub enum RunningStatePB {
   Stopped = 4,
 }
 
-impl From<RunningState> for RunningStatePB {
-  fn from(value: RunningState) -> Self {
-    match value {
-      RunningState::ReadyToConnect => RunningStatePB::ReadyToRun,
-      RunningState::Connecting => RunningStatePB::Connecting,
-      RunningState::Connected { .. } => RunningStatePB::Connected,
-      RunningState::Running { .. } => RunningStatePB::Running,
-      RunningState::Stopped { .. } => RunningStatePB::Stopped,
-      RunningState::UnexpectedStop { .. } => RunningStatePB::Stopped,
-    }
-  }
-}
-
 #[derive(Default, ProtoBuf, Clone, Debug)]
 pub struct LocalAIPB {
   #[pb(index = 1)]
@@ -625,9 +613,6 @@ pub struct UpdateChatSettingsPB {
 
   #[pb(index = 2)]
   pub rag_ids: Vec<String>,
-
-  #[pb(index = 3)]
-  pub chat_model: String,
 }
 
 #[derive(Debug, Default, Clone, ProtoBuf)]
@@ -747,4 +732,10 @@ impl From<PendingResource> for LackOfAIResourcePB {
       },
     }
   }
+}
+
+#[derive(Default, ProtoBuf, Clone, Debug)]
+pub struct CustomPromptDatabaseViewIdPB {
+  #[pb(index = 1)]
+  pub id: String,
 }

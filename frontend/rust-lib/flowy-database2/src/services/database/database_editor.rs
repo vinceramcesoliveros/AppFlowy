@@ -1,7 +1,8 @@
+use crate::DatabaseUser;
 use crate::entities::*;
-use crate::notification::{database_notification_builder, DatabaseNotification};
+use crate::notification::{DatabaseNotification, database_notification_builder};
 use crate::services::calculations::Calculation;
-use crate::services::cell::{apply_cell_changeset, get_cell_protobuf, CellCache};
+use crate::services::cell::{CellCache, apply_cell_changeset, get_cell_protobuf, stringify_cell};
 use crate::services::database::database_observe::*;
 use crate::services::database::util::database_view_setting_pb_from_view;
 use crate::services::database_view::{
@@ -10,16 +11,15 @@ use crate::services::database_view::{
 use crate::services::field::checklist_filter::ChecklistCellChangeset;
 use crate::services::field::type_option_transform::transform_type_option;
 use crate::services::field::{
-  default_type_option_data_from_type, select_type_option_from_field, type_option_data_from_pb,
   SelectOptionCellChangeset, StringCellData, TypeOptionCellDataHandler, TypeOptionCellExt,
+  default_type_option_data_from_type, select_type_option_from_field, type_option_data_from_pb,
 };
-use crate::services::field_settings::{default_field_settings_by_layout_map, FieldSettings};
+use crate::services::field_settings::{FieldSettings, default_field_settings_by_layout_map};
 use crate::services::filter::{Filter, FilterChangeset};
-use crate::services::group::{default_group_setting, GroupChangeset, GroupSetting};
+use crate::services::group::{GroupChangeset, GroupSetting, default_group_setting};
 use crate::services::share::csv::{CSVExport, CSVFormat};
 use crate::services::sort::Sort;
 use crate::utils::cache::AnyTypeCache;
-use crate::DatabaseUser;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use collab::core::collab_plugin::CollabPluginType;
@@ -36,10 +36,10 @@ use collab_database::views::{
 };
 use collab_entity::CollabType;
 use collab_integrate::collab_builder::{AppFlowyCollabBuilder, CollabBuilderConfig};
-use flowy_error::{internal_error, ErrorCode, FlowyError, FlowyResult};
+use flowy_error::{ErrorCode, FlowyError, FlowyResult, internal_error};
 use flowy_notification::DebounceNotificationSender;
 use futures::future::join_all;
-use futures::{pin_mut, StreamExt};
+use futures::{StreamExt, pin_mut};
 use lib_infra::box_any::BoxAny;
 use lib_infra::priority_task::TaskDispatcher;
 use lib_infra::util::timestamp;
@@ -48,8 +48,8 @@ use std::str::FromStr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::select;
-use tokio::sync::oneshot::Sender;
 use tokio::sync::RwLock as TokioRwLock;
+use tokio::sync::oneshot::Sender;
 use tokio::sync::{broadcast, oneshot};
 use tokio::task::yield_now;
 use tokio_util::sync::CancellationToken;
@@ -603,9 +603,7 @@ impl DatabaseEditor {
 
     trace!(
       "duplicate row: {:?} at index:{}, new row:{:?}",
-      row_id,
-      index,
-      row_order
+      row_id, index, row_order
     );
 
     Ok(())
@@ -641,9 +639,7 @@ impl DatabaseEditor {
     })?;
     trace!(
       "Move row:{} from group:{} to group:{}",
-      from_row,
-      from_group,
-      to_group
+      from_row, from_group, to_group
     );
 
     // when moving row between groups, the cells of the row should be updated
@@ -1852,6 +1848,74 @@ impl DatabaseEditor {
         Ok(row_data)
       },
     }
+  }
+
+  pub async fn get_prompts_from_database(
+    &self,
+    view_id: &str,
+  ) -> Result<Vec<CustomPromptPB>, FlowyError> {
+    let fields = self.get_fields(view_id, None).await;
+    let primary_field = fields
+      .iter()
+      .find(|f| f.is_primary)
+      .ok_or(FlowyError::internal().with_context("Cannot find primary field"))?;
+    let content_field = fields
+      .iter()
+      .find(|f| f.name.to_lowercase() == "content" && f.field_type == FieldType::RichText.value())
+      .or_else(|| {
+        fields
+          .iter()
+          .find(|f| !f.is_primary && f.field_type == FieldType::RichText.value())
+      })
+      .ok_or(FlowyError::internal().with_context("Cannot find content field"))?;
+    let example_field = fields.iter().find(|f| f.name.to_lowercase() == "example");
+    let category_field = fields.iter().find(|f| f.name.to_lowercase() == "category");
+
+    fn extract_cell_value(row: &Row, field: &Field) -> Option<String> {
+      row
+        .cells
+        .get(&field.id)
+        .map(|cell| stringify_cell(cell, field))
+    }
+
+    let custom_prompts = self
+      .get_all_rows(view_id)
+      .await?
+      .into_iter()
+      .filter_map(|row| {
+        let id = row.id.to_string();
+
+        let primary_cell = row.cells.get(&primary_field.id);
+        let name = primary_cell
+          .map(|cell| stringify_cell(cell, primary_field))
+          .unwrap_or_default();
+
+        let content_cell = row.cells.get(&content_field.id);
+        let content = content_cell.map(|cell| stringify_cell(cell, content_field))?;
+
+        if content.is_empty() {
+          return None;
+        }
+
+        let example = example_field
+          .and_then(|field| extract_cell_value(&row, field))
+          .unwrap_or_default();
+
+        let category = category_field
+          .and_then(|field| extract_cell_value(&row, field))
+          .unwrap_or_else(|| "other".to_string());
+
+        Some(CustomPromptPB {
+          id,
+          name,
+          content,
+          example,
+          category,
+        })
+      })
+      .collect::<Vec<_>>();
+
+    Ok(custom_prompts)
   }
 
   async fn get_auto_updated_fields(&self, view_id: &str) -> Vec<Field> {

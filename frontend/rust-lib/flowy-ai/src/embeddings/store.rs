@@ -1,23 +1,23 @@
 use crate::embeddings::document_indexer::split_text_into_chunks;
 use crate::embeddings::embedder::{Embedder, OllamaEmbedder};
 use crate::embeddings::indexer::{EmbeddingModel, IndexerProvider};
+use crate::local_ai::chat::retriever::MultipleSourceRetrieverStore;
 use async_trait::async_trait;
 use flowy_ai_pub::cloud::CollabType;
-use flowy_ai_pub::entities::SOURCE_ID;
-use flowy_error::FlowyError;
+use flowy_ai_pub::entities::{RAG_IDS, SOURCE_ID};
+use flowy_error::{FlowyError, FlowyResult};
 use flowy_sqlite_vec::db::VectorSqliteDB;
+use flowy_sqlite_vec::entities::{EmbeddedContent, SqliteEmbeddedDocument};
 use futures::stream::{self, StreamExt};
 use langchain_rust::llm::client::OllamaClient;
-use langchain_rust::{
-  schemas::Document,
-  vectorstore::{VecStoreOptions, VectorStore},
-};
+use langchain_rust::schemas::Document;
+use langchain_rust::vectorstore::{VecStoreOptions, VectorStore};
 use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Weak};
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -44,6 +44,118 @@ impl SqliteVectorStore {
 
     let embedder = Embedder::Ollama(OllamaEmbedder { ollama });
     Ok(embedder)
+  }
+
+  pub(crate) async fn select_all_embedded_documents(
+    &self,
+    workspace_id: &str,
+    rag_ids: &[String],
+  ) -> FlowyResult<Vec<SqliteEmbeddedDocument>> {
+    // Get the vector database
+    let vector_db = match self.vector_db.upgrade() {
+      Some(db) => db,
+      None => return Err(FlowyError::internal().with_context("Vector database not initialized")),
+    };
+
+    vector_db
+      .select_all_embedded_documents(workspace_id, rag_ids)
+      .await
+      .map_err(|err| {
+        FlowyError::internal().with_context(format!("Failed to select embedded documents: {}", err))
+      })
+  }
+
+  pub async fn select_all_embedded_content(
+    &self,
+    workspace_id: &str,
+    rag_ids: &[String],
+    limit: usize,
+  ) -> FlowyResult<Vec<EmbeddedContent>> {
+    let vector_db = match self.vector_db.upgrade() {
+      Some(db) => db,
+      None => return Err(FlowyError::internal().with_context("Vector database not initialized")),
+    };
+
+    vector_db
+      .select_all_embedded_content(workspace_id, rag_ids, limit)
+      .await
+      .map_err(|err| {
+        FlowyError::internal().with_context(format!("Failed to select embedded content: {}", err))
+      })
+  }
+}
+
+#[async_trait]
+impl MultipleSourceRetrieverStore for SqliteVectorStore {
+  fn retriever_name(&self) -> &'static str {
+    "Sqlite Multiple Source Retriever"
+  }
+
+  async fn read_documents(
+    &self,
+    workspace_id: &Uuid,
+    query: &str,
+    limit: usize,
+    rag_ids: &[String],
+    score_threshold: f32,
+    _full_search: bool,
+  ) -> FlowyResult<Vec<Document>> {
+    let vector_db = match self.vector_db.upgrade() {
+      Some(db) => db,
+      None => return Err(FlowyError::internal().with_context("Vector database not initialized")),
+    };
+
+    // Create embedder and generate embedding for query
+    let embedder = self.create_embedder()?;
+    let request = GenerateEmbeddingsRequest::new(
+      embedder.model().name().to_string(),
+      EmbeddingsInput::Single(query.to_string()),
+    );
+
+    let embedding = embedder.embed(request).await?.embeddings;
+    if embedding.is_empty() {
+      return Ok(Vec::new());
+    }
+
+    debug_assert!(embedding.len() == 1);
+    let query_embedding = embedding.first().unwrap();
+
+    // Perform similarity search in the database
+    let results = vector_db
+      .search_with_score(
+        &workspace_id.to_string(),
+        rag_ids,
+        query_embedding,
+        limit as i32,
+        score_threshold,
+      )
+      .await?;
+
+    trace!(
+      "[VectorStore] Found {} results for query:{}, rag_ids: {:?}, score_threshold: {}",
+      results.len(),
+      query,
+      rag_ids,
+      score_threshold
+    );
+
+    // Convert results to Documents
+    let documents = results
+      .into_iter()
+      .map(|result| {
+        let mut metadata = HashMap::new();
+
+        if let Some(map) = result.metadata.as_ref().and_then(|v| v.as_object()) {
+          for (key, value) in map {
+            metadata.insert(key.clone(), value.clone());
+          }
+        }
+
+        Document::new(result.content).with_metadata(metadata)
+      })
+      .collect();
+
+    Ok(documents)
   }
 }
 
@@ -156,7 +268,7 @@ impl VectorStore for SqliteVectorStore {
     let rag_ids = opt
       .filters
       .as_ref()
-      .and_then(|filters| filters.get("rag_ids"))
+      .and_then(|filters| filters.get(RAG_IDS))
       .and_then(|value| value.as_array())
       .map(|array| {
         array
@@ -176,68 +288,23 @@ impl VectorStore for SqliteVectorStore {
 
     // Return empty result if workspace_id is missing
     let workspace_id = match workspace_id {
-      Some(id) => id.to_string(),
-      None => return Ok(Vec::new()),
+      Some(id) => id,
+      None => {
+        warn!("[VectorStore] Missing workspace_id in filters. Returning empty result.");
+        return Ok(Vec::new());
+      },
     };
 
-    // Get the vector database
-    let vector_db = match self.vector_db.upgrade() {
-      Some(db) => db,
-      None => return Err("Vector database not initialized".into()),
-    };
-
-    // Create embedder and generate embedding for query
-    let embedder = self.create_embedder()?;
-    let request = GenerateEmbeddingsRequest::new(
-      embedder.model().name().to_string(),
-      EmbeddingsInput::Single(query.to_string()),
-    );
-
-    let embedding = match embedder.embed(request).await {
-      Ok(result) => result.embeddings,
-      Err(e) => return Err(Box::new(e)),
-    };
-
-    if embedding.is_empty() {
-      return Ok(Vec::new());
-    }
-
-    let score_threshold = opt.score_threshold.unwrap_or(0.4);
-    let query_embedding = embedding.first().unwrap();
-
-    // Perform similarity search in the database
-    let results = vector_db
-      .search_with_score(
+    self
+      .read_documents(
         &workspace_id,
-        rag_ids,
-        query_embedding,
-        limit as i32,
-        score_threshold,
+        query,
+        limit,
+        &rag_ids,
+        opt.score_threshold.unwrap_or(0.4),
+        true,
       )
-      .await?;
-
-    trace!(
-      "[VectorStore] Found {} results for query: {}",
-      results.len(),
-      query
-    );
-
-    // Convert results to Documents
-    let documents = results
-      .into_iter()
-      .map(|result| {
-        let mut metadata = HashMap::new();
-
-        if let Some(map) = result.metadata.as_ref().and_then(|v| v.as_object()) {
-          for (key, value) in map {
-            metadata.insert(key.clone(), value.clone());
-          }
-        }
-
-        Document::new(result.content).with_metadata(metadata)
-      })
-      .collect();
-
-    Ok(documents)
+      .await
+      .map_err(|err| Box::new(err) as Box<dyn Error>)
   }
 }

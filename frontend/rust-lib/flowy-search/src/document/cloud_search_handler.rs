@@ -9,7 +9,7 @@ use crate::{
 use async_stream::stream;
 use flowy_error::FlowyResult;
 use flowy_folder::entities::ViewPB;
-use flowy_folder::{manager::FolderManager, ViewLayout};
+use flowy_folder::{ViewLayout, manager::FolderManager};
 use flowy_search_pub::cloud::{SearchCloudService, SearchResult};
 use lib_infra::async_trait::async_trait;
 use std::pin::Pin;
@@ -74,7 +74,7 @@ impl SearchHandler for DocumentCloudSearchHandler {
           return;
         }
       };
-      trace!("[Search] search result: {:?}", result_items);
+      trace!("[Search] ai search result: {:?}", result_items);
 
       // Prepare input for search summary generation.
       let summary_input: Vec<SearchResult> = result_items
