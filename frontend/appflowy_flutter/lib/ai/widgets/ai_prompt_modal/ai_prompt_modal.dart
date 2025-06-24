@@ -1,4 +1,5 @@
 import 'package:appflowy/ai/ai.dart';
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/workspace/application/user/prelude.dart';
@@ -46,6 +47,7 @@ class AiPromptModal extends StatelessWidget {
     final theme = AppFlowyTheme.of(context);
 
     return AFModal(
+      backgroundColor: theme.backgroundColorScheme.primary,
       constraints: const BoxConstraints(
         maxWidth: 1200,
         maxHeight: 800,
@@ -102,7 +104,7 @@ class AiPromptModal extends StatelessWidget {
                               child: AiPromptCategoryList(),
                             ),
                             if (readyState.isCustomPromptSectionSelected &&
-                                readyState.customPromptDatabaseViewId == null)
+                                readyState.databaseConfig == null)
                               const Expanded(
                                 flex: 5,
                                 child: Center(

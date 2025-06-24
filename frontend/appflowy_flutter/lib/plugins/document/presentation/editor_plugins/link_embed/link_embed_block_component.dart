@@ -188,33 +188,26 @@ class LinkEmbedBlockComponentState
 
   Widget buildContent(BuildContext context) {
     final theme = AppFlowyTheme.of(context), textScheme = theme.textColorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: !UniversalPlatform.isMobile
-                ? null
-                : () =>
-                    afLaunchUrlString(url, addingHttpSchemeWhenFailed: true),
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
-              child: FlowyNetworkImage(
-                url: linkInfo.imageUrl ?? '',
-                width: MediaQuery.of(context).size.width,
+    final hasSiteName = linkInfo.siteName?.isNotEmpty ?? false;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => afLaunchUrlString(url, addingHttpSchemeWhenFailed: true),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+                child: FlowyNetworkImage(
+                  url: linkInfo.imageUrl ?? '',
+                  width: MediaQuery.of(context).size.width,
+                ),
               ),
             ),
-          ),
-        ),
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () =>
-                afLaunchUrlString(url, addingHttpSchemeWhenFailed: true),
-            child: Container(
+            Container(
               height: 64,
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
               child: Row(
@@ -231,15 +224,17 @@ class LinkEmbedBlockComponentState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        FlowyText(
-                          linkInfo.siteName ?? '',
-                          color: textScheme.primary,
-                          fontSize: 14,
-                          figmaLineHeight: 20,
-                          fontWeight: FontWeight.w600,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        VSpace(4),
+                        if (hasSiteName) ...[
+                          FlowyText(
+                            linkInfo.siteName ?? '',
+                            color: textScheme.primary,
+                            fontSize: 14,
+                            figmaLineHeight: 20,
+                            fontWeight: FontWeight.w600,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          VSpace(4),
+                        ],
                         FlowyText.regular(
                           url,
                           color: textScheme.secondary,
@@ -253,9 +248,9 @@ class LinkEmbedBlockComponentState
                 ],
               ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 

@@ -5,8 +5,8 @@ import 'package:appflowy/shared/af_role_pb_extension.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/workspace/presentation/settings/shared/settings_body.dart';
 import 'package:appflowy/workspace/presentation/settings/shared/settings_category_spacer.dart';
-import 'package:appflowy/workspace/presentation/settings/widgets/members/inivitation/inivite_member_by_link.dart';
-import 'package:appflowy/workspace/presentation/settings/widgets/members/inivitation/invite_member_by_email.dart';
+import 'package:appflowy/workspace/presentation/settings/widgets/members/invitation/invite_member_by_email.dart';
+import 'package:appflowy/workspace/presentation/settings/widgets/members/invitation/invite_member_by_link.dart';
 import 'package:appflowy/workspace/presentation/settings/widgets/members/workspace_member_bloc.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy/workspace/presentation/widgets/pop_up_action.dart';
@@ -255,7 +255,7 @@ class WorkspaceMembersPage extends StatelessWidget {
             confirmLabel: LocaleKeys
                 .settings_appearance_members_memberLimitExceededUpgrade
                 .tr(),
-            onConfirm: () => context
+            onConfirm: (_) => context
                 .read<WorkspaceMemberBloc>()
                 .add(const WorkspaceMemberEvent.upgradePlan()),
           );
@@ -420,9 +420,7 @@ class _MemberItem extends StatelessWidget {
               UserAvatar(
                 iconUrl: member.avatarUrl,
                 name: member.name,
-                size: 24,
-                fontSize: 12,
-                emojiFontSize: 20,
+                size: AFAvatarSize.s,
               ),
               HSpace(8),
               Flexible(
@@ -533,7 +531,7 @@ class _MemberMoreActionList extends StatelessWidget {
                   .settings_appearance_members_areYouSureToRemoveMember
                   .tr(),
               confirmLabel: LocaleKeys.button_yes.tr(),
-              onConfirm: () => context.read<WorkspaceMemberBloc>().add(
+              onConfirm: (_) => context.read<WorkspaceMemberBloc>().add(
                     WorkspaceMemberEvent.removeWorkspaceMemberByEmail(
                       action.member.email,
                     ),
